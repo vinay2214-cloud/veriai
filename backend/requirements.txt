@@ -4,7 +4,7 @@ numpy
 scikit-learn
 pydantic
 python-multipart
-python-magic-bin>=0.4.14
+python-magic>=0.4.27
 aiosqlite
 SQLAlchemy
 asyncpg
