@@ -317,26 +317,48 @@ export async function renderSettingsPage(rootEl, api) {
     }
 
     // Save weights
-    document.getElementById('save-weights-btn').addEventListener('click', async () => {
-        const data = {};
-        document.querySelectorAll('.weight-slider').forEach(s => { data[s.dataset.key] = parseInt(s.value) / 100; });
-        const btn = document.getElementById('save-weights-btn');
-        btn.disabled = true;
-        btn.textContent = '⏳ Saving...';
-        const res = await api.post('/settings/weights', data);
-        const statusEl = document.getElementById('save-status');
-        statusEl.style.display = 'block';
-        if (res) { 
-            statusEl.textContent = '✅ Weights saved and applied to all future audits!'; 
-            statusEl.style.color = 'var(--accent-green)';
-            btn.textContent = '✅ Saved!';
-            document.getElementById('active-preset').textContent = 'Custom Configuration';
-        } else { 
-            statusEl.textContent = '❌ Save failed — check backend connection'; 
-            statusEl.style.color = 'var(--accent-red)'; 
-        }
-        setTimeout(() => { statusEl.style.display = 'none'; btn.disabled = false; btn.textContent = '💾 Save Configuration & Apply'; }, 3000);
-    });
+    const saveBtn = document.getElementById('save-weights-btn');
+    const saveStatusEl = document.getElementById('save-status');
+    if (saveBtn) {
+        // Ensure the button is interactable when this page renders.
+        saveBtn.disabled = false;
+        saveBtn.removeAttribute('disabled');
+        saveBtn.addEventListener('click', async () => {
+            const data = {};
+            document.querySelectorAll('.weight-slider').forEach(s => { data[s.dataset.key] = parseInt(s.value) / 100; });
+            saveBtn.disabled = true;
+            saveBtn.textContent = '⏳ Saving...';
+            if (saveStatusEl) saveStatusEl.style.display = 'block';
+            try {
+                const res = await api.post('/settings/weights', data);
+                if (res) {
+                    if (saveStatusEl) {
+                        saveStatusEl.textContent = '✅ Weights saved and applied to all future audits!';
+                        saveStatusEl.style.color = 'var(--accent-emerald)';
+                    }
+                    saveBtn.textContent = '✅ Saved!';
+                    const activePresetEl = document.getElementById('active-preset');
+                    if (activePresetEl) activePresetEl.textContent = 'Custom Configuration';
+                } else {
+                    if (saveStatusEl) {
+                        saveStatusEl.textContent = '❌ Save failed — check backend connection';
+                        saveStatusEl.style.color = 'var(--accent-red)';
+                    }
+                }
+            } catch (err) {
+                if (saveStatusEl) {
+                    saveStatusEl.textContent = '❌ Save failed — ' + err.message;
+                    saveStatusEl.style.color = 'var(--accent-red)';
+                }
+            } finally {
+                setTimeout(() => {
+                    if (saveStatusEl) saveStatusEl.style.display = 'none';
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = '💾 Save Configuration & Apply';
+                }, 3000);
+            }
+        });
+    }
 
     updateSimulation();
 }
