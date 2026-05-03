@@ -1,68 +1,81 @@
-# VeriAI — AI Trust Auditor Platform
+# VeriAI – AI Trust Auditor Platform
 
-VeriAI is a comprehensive, production-ready AI governance platform designed to detect, score, explain, and correct bias and hallucinations in AI systems. 
+## 🚀 Overview
 
-## Features
+VeriAI is an end-to-end AI trust auditing platform that evaluates model outputs and datasets for fairness risk and factual reliability before they reach end users. It combines bias detection, hallucination/truth verification, explainability, and a composite trust score to make AI behavior measurable, transparent, and actionable.
 
-1. **Bias Detection**: Statistical fairness measurements (Demographic Parity, Equalized Odds) and feature importance using permutation testing.
-2. **Truth Verification**: Custom Retrieval-Augmented Generation (RAG) using TF-IDF and cosine similarity against a local knowledge base.
-3. **Cluster & Distribution Analysis**: KMeans clustering for sub-group fairness checks and statistical distribution stability monitoring.
-4. **Auto-Correction Engine**: Automatically adjust weights for biased features and replace unverified claims with factual citations.
-5. **Human Feedback Loop**: Collect human assessments on audits to recalibrate the overall Trust Score weighting system automatically.
-6. **Premium Dashboard**: Dark-themed, glassmorphism UI with animated gauges, interactive charts, and a real-time audit pipeline visualizer.
-7. **LLM Output Auditing**: Dedicated endpoint for prompt/output auditing with claim-level hallucination detection and trust delta after auto-correction.
-8. **Compliance Export**: Download report artifacts in JSON and PDF with citations, reasoning steps, and reviewer trail.
-9. **Portability-safe Explainability**: SHAP-first with automatic LIME/coefficient fallback for environments where SHAP wheels are unavailable.
+Built for high-impact domains like hiring, healthcare, finance, and public services, VeriAI helps teams detect issues early, explain root causes, apply corrective actions, and escalate low-trust cases for human review.
 
-## Architecture
+## ✨ Key Features
 
-- **Backend**: FastAPI (Python), asynchronous, modular ML services.
-- **Frontend**: Vanilla HTML/CSS/JS SPA, styling via custom CSS variables, no heavy framework dependencies.
-- **Data Persistence**: Asynchronous SQLite (`aiosqlite`) designed for easy migration to cloud databases like Firestore.
+- **Bias Detection**: Fairness checks including Demographic Parity and Equalized Odds/Opportunity metrics across protected groups.
+- **Truth Verification**: RAG-style similarity validation using a local knowledge base with TF-IDF + FAISS retrieval.
+- **Explainability**: SHAP-first explanations with robust fallback feature-importance paths.
+- **Trust Scoring System**: Weighted composite score from truth, bias, confidence, and stability signals.
+- **Dashboard & Visualization**: Interactive UI for audit metrics, trends, review queues, and model insights.
+- **LLM Output Auditing**: Prompt/response auditing endpoint with claim-level hallucination checks and trust delta tracking.
+- **Compliance Export**: Export audit reports/artifacts (JSON/PDF) for governance and compliance workflows.
 
-## Getting Started (Local Development)
+## 🏗 Architecture
 
-### Prerequisites
-- Python 3.9+
-- Node.js (Optional, just for simple local HTTP servers if needed)
+VeriAI follows a modular full-stack architecture:
 
-### 1. Install Backend Dependencies
+- **Backend (FastAPI, Python)**: API orchestration, audit pipeline execution, scoring, correction, review workflows, and report endpoints.
+- **Frontend (HTML/CSS/JavaScript SPA)**: Dashboard, audit submission, report views, settings, and review actions.
+- **Database (SQLite + aiosqlite)**: Persistent storage for audits, knowledge base records, feedback, and settings.
+- **ML Components**: scikit-learn-based fairness analysis, clustering (KMeans), distribution analysis, and explainability integrations.
+
+## ⚙️ Tech Stack
+
+- FastAPI
+- Python
+- scikit-learn
+- pandas / numpy
+- FAISS
+- JavaScript frontend (HTML/CSS/Vanilla JS SPA)
+- SQLite / aiosqlite
+- SHAP
+
+## 🧠 How It Works
+
+1. **Input data**: Accepts text, prompt/LLM output pairs, or structured dataset payloads.
+2. **Bias analysis**: Computes fairness metrics and subgroup bias patterns.
+3. **Truth verification**: Retrieves supporting evidence from a local knowledge base and scores groundedness.
+4. **Scoring**: Combines fairness, truth, confidence, and stability into a single Trust Score.
+5. **Dashboard output**: Publishes results to visual dashboards, report views, and human-review queues.
+
+## 🖥️ Local Setup
+
+### Backend
+
 ```bash
-cd veriai
-python -m venv venv
-source venv/bin/activate
-pip install -r backend/requirements.txt
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --reload
 ```
 
-### 2. Run the Full Stack
-The FastAPI app serves the API *and* the static frontend files.
-```bash
-# This automatically creates the DB and seeds it with demo data!
-python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
-```
-
-### 3. Open the Dashboard
-Open your browser and navigate to:
-**http://127.0.0.1:8000/**
-
-## Getting Started (Docker)
-
-To run everything in a containerized environment:
+### Frontend
 
 ```bash
-cd veriai
-docker-compose up --build
+cd frontend
+python -m http.server 3000
 ```
-Access the dashboard at `http://localhost:8000`.
 
-## API Documentation
-Once the server is running, the Swagger UI documentation is available at:
-- Swagger UI: `http://127.0.0.1:8000/docs`
-- ReDoc: `http://127.0.0.1:8000/redoc`
+Backend API docs are available at `http://127.0.0.1:8000/docs` when the server is running.
 
-## New API Additions
+## 🌐 Live Demo
 
-- `POST /api/audit-llm-output` — audits prompt + LLM output for hallucinations.
-- `GET /api/reports/{audit_id}/export?format=json|pdf` — compliance artifact export.
-- `GET /api/dashboard/fairness-drift` — fairness drift signal over recent audits.
-- `GET /api/dashboard/model-comparison` — model-vs-model fairness/accuracy comparison on same dataset.
+https://veriai-eyxl.onrender.com
+
+## 📂 Project Structure
+
+```text
+veriai/
+|-- backend/               # FastAPI app, routes, services, models, DB logic
+|-- frontend/              # Static SPA (HTML/CSS/JS), pages, client logic
+|-- docker-compose.yml     # Local multi-service container setup
+|-- Dockerfile             # App container definition
+`-- README.md
+```
+
+
