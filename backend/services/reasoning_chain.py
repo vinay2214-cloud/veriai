@@ -23,6 +23,7 @@ import logging
 from ..config import DEFAULT_NUM_CLUSTERS, HUMAN_REVIEW_THRESHOLD
 from .bias_service import compute_bias_score
 from .truth_service import verify_claims
+from .llm_factcheck_service import verify_text_with_llm_rag
 from .cluster_service import cluster_bias_analysis
 from .distribution_service import compute_distribution_report
 from .scoring_service import compute_trust_score
@@ -152,7 +153,10 @@ async def run_audit(input_text: str, num_clusters: int = None, depth: str = "sta
 
     async def run_truth():
         t = time.time()
-        result = await loop.run_in_executor(_executor, verify_claims, input_text)
+        if text_mode:
+            result = await loop.run_in_executor(_executor, verify_text_with_llm_rag, input_text)
+        else:
+            result = await loop.run_in_executor(_executor, verify_claims, input_text)
         step_timings["truth"] = round(time.time() - t, 3)
         return result
 
@@ -364,6 +368,10 @@ async def run_audit(input_text: str, num_clusters: int = None, depth: str = "sta
             "truth_score": round(truth_result["truth_score"], 4),
             "groundedness": round(truth_result["groundedness"], 4),
             "citations": truth_result["citations"],
+            "claim_citations": truth_result.get("claim_citations", []),
+            "claims": truth_result.get("claims", []),
+            "verification_mode": truth_result.get("verification_mode", "embedding_similarity"),
+            "llm_model": truth_result.get("llm_model"),
         },
         "cluster": {
             "cluster_fairness": round(cluster_fairness, 4),

@@ -215,7 +215,7 @@ async def knowledge_base_stats():
         "recent_articles": recent,
         "faiss_status": faiss_status,
         "index_type": "FAISS IndexFlatIP (Cosine Similarity)",
-        "vectorizer": "TF-IDF (max_features=5000)"
+        "vectorizer": "SentenceTransformer all-MiniLM-L6-v2 (384-dim)"
     }
 
 

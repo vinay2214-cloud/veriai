@@ -3,7 +3,8 @@ Verifies claims against the local knowledge base using RAG.
 """
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
-from ..services.truth_service import verify_claims, invalidate_cache
+from ..services.llm_factcheck_service import verify_text_with_llm_rag
+from ..services.truth_service import invalidate_cache
 
 router = APIRouter()
 
@@ -16,5 +17,5 @@ class TruthCheckRequest(BaseModel):
 async def truth_check(request: TruthCheckRequest):
     """Verify a single claim against the knowledge base."""
     invalidate_cache()
-    result = verify_claims(request.claim)
+    result = verify_text_with_llm_rag(request.claim)
     return result

@@ -28,6 +28,7 @@ SCHEMA = {
             model_name TEXT,
             prompt TEXT,
             report_json TEXT,
+            column_mapping TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     """,
@@ -78,6 +79,7 @@ AUDIT_COLUMNS = {
     "model_name": "TEXT",
     "prompt": "TEXT",
     "report_json": "TEXT",
+    "column_mapping": "TEXT",
 }
 
 async def init_db() -> None:
@@ -122,15 +124,19 @@ async def fetch_all(query: str, params: tuple = ()):
 async def insert_audit(audit_id: str, input_text: str, bias_score: float = None,
                        truth_score: float = None, trust_score: float = None,
                        corrected: str = None, audit_type: str = "dataset",
-                       model_name: str = None, prompt: str = None, report_json=None) -> None:
+                       model_name: str = None, prompt: str = None, report_json=None,
+                       column_mapping: str = None) -> None:
     report_payload = json.dumps(report_json) if report_json is not None else None
     await execute(
-        "INSERT OR REPLACE INTO audits (id, input, bias_score, truth_score, trust_score, corrected, audit_type, model_name, prompt, report_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (audit_id, input_text, bias_score, truth_score, trust_score, corrected, audit_type, model_name, prompt, report_payload),
+        "INSERT OR REPLACE INTO audits (id, input, bias_score, truth_score, trust_score, corrected, audit_type, model_name, prompt, report_json, column_mapping) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (audit_id, input_text, bias_score, truth_score, trust_score, corrected, audit_type, model_name, prompt, report_payload, column_mapping),
     )
 
 async def get_audit(audit_id: str):
-    row = await fetch_one("SELECT * FROM audits WHERE id = ?", (audit_id,))
+    row = await fetch_one(
+        "SELECT id, input, bias_score, truth_score, trust_score, corrected, audit_type, model_name, prompt, report_json, column_mapping, created_at FROM audits WHERE id = ?",
+        (audit_id,),
+    )
     return row
 
 async def list_audits(limit: int = 20):
@@ -182,4 +188,3 @@ async def get_review_by_audit(audit_id: str):
         "created_at": row[2],
         "reviewed_at": row[3],
     }
-

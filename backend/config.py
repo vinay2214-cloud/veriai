@@ -14,6 +14,21 @@ from pathlib import Path
 # SQLite file stored in the project root for local development.
 BASE_DIR = Path(__file__).resolve().parent.parent
 DB_PATH = os.getenv("VERIAI_DB_PATH", str(BASE_DIR / "veriai.db"))
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+
+
+def get_async_database_url() -> str:
+    """Return async SQLAlchemy DB URL.
+    Supports Render-style `postgres://...` and normalizes it to asyncpg.
+    Falls back to local SQLite for development.
+    """
+    if DATABASE_URL:
+        if DATABASE_URL.startswith("postgres://"):
+            return DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)
+        if DATABASE_URL.startswith("postgresql://"):
+            return DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return DATABASE_URL
+    return f"sqlite+aiosqlite:///{DB_PATH}"
 
 # ---------------------------------------------------------------------------
 # Trust score weighting (must sum to 1.0)

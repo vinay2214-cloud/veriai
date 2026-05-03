@@ -37,7 +37,8 @@ async def get_report(audit_id: str):
         "audit_type": row[6] if len(row) > 6 else "dataset",
         "model_name": row[7] if len(row) > 7 else None,
         "prompt": row[8] if len(row) > 8 else None,
-        "created_at": row[10] if len(row) > 10 else None,
+        "column_mapping": json.loads(row[10]) if len(row) > 10 and row[10] else None,
+        "created_at": row[11] if len(row) > 11 else None,
     }
     if report_json:
         base["report"] = report_json

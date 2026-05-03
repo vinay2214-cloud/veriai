@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+import json
 
 from backend.main import app
 
@@ -42,3 +43,53 @@ def test_report_export_json_and_pdf():
         pdf_export = client.get(f"/api/reports/{audit_id}/export?format=pdf")
         assert pdf_export.status_code == 200
         assert pdf_export.headers["content-type"].startswith("application/pdf")
+
+
+def test_preview_csv_schema_detection():
+    csv_data = (
+        "race,age,income\n"
+        "White,35,<=50K\n"
+        "Black,42,>50K\n"
+        "Asian,29,<=50K\n"
+    )
+    with TestClient(app) as client:
+        res = client.post(
+            "/api/audit/preview-csv",
+            files={"file": ("sample.csv", csv_data, "text/csv")},
+        )
+    assert res.status_code == 200
+    body = res.json()
+    assert "columns" in body
+    by_name = {c["name"]: c for c in body["columns"]}
+    assert by_name["race"]["type"] in {"categorical", "binary"}
+    assert by_name["income"]["type"] == "binary"
+    assert by_name["income"]["suggested_role"] == "target"
+
+
+def test_run_mapped_audit_accepts_raw_categorical_csv():
+    csv_data = (
+        "race,age,income,zipcode\n"
+        "White,35,<=50K,10001\n"
+        "Black,42,>50K,10002\n"
+        "White,51,>50K,10001\n"
+        "Black,30,<=50K,10003\n"
+    )
+    mapping = {
+        "roles": {
+            "race": "protected_attribute",
+            "age": "feature",
+            "income": "target",
+            "zipcode": "ignore",
+        }
+    }
+    with TestClient(app) as client:
+        res = client.post(
+            "/api/audit/run-mapped",
+            files={"file": ("mapped.csv", csv_data, "text/csv")},
+            data={"mapping": json.dumps(mapping), "depth": "fast"},
+        )
+    assert res.status_code == 200
+    body = res.json()
+    assert "audit_id" in body
+    assert "column_mapping" in body
+    assert body["column_mapping"]["target_column"] == "income"

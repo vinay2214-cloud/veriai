@@ -4,8 +4,14 @@ numpy
 scikit-learn
 pydantic
 python-multipart
+python-magic-bin>=0.4.14
 aiosqlite
+SQLAlchemy
+asyncpg
 faiss-cpu
+sentence-transformers
+litellm
+weasyPrint
 pandas
 reportlab
 pytest

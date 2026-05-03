@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 
 from ..config import HUMAN_REVIEW_THRESHOLD
 from .scoring_service import compute_trust_score
-from .truth_service import verify_claims
+from .llm_factcheck_service import verify_single_claim_with_llm_rag
 
 
 def _extract_claims(output_text: str) -> List[str]:
@@ -34,10 +34,12 @@ def audit_llm_output(prompt: str, output_text: str, model_name: str = "unknown-l
     ]
 
     for claim in claims:
-        verification = verify_claims(claim)
+        verification = verify_single_claim_with_llm_rag(claim)
         truth_score = float(verification.get("truth_score", 0.0))
         citations = verification.get("citations", [])
         best = citations[0] if citations else {}
+        claim_citation = verification.get("claim_citations", [])
+        citation_meta = claim_citation[0] if claim_citation else {}
         hallucinated = truth_score < 0.65
         truth_scores.append(truth_score)
         claim_results.append(
@@ -49,6 +51,9 @@ def audit_llm_output(prompt: str, output_text: str, model_name: str = "unknown-l
                 "best_citation_title": best.get("title"),
                 "best_citation_source": best.get("source"),
                 "best_citation_snippet": best.get("snippet"),
+                "verdict": citation_meta.get("verdict", "Unverifiable"),
+                "reasoning": citation_meta.get("reasoning", ""),
+                "source_text": citation_meta.get("source_text", best.get("snippet")),
             }
         )
 
@@ -149,6 +154,8 @@ def audit_llm_output(prompt: str, output_text: str, model_name: str = "unknown-l
             "truth_score": round(avg_truth, 4),
             "groundedness": round(avg_truth, 4),
             "citations": flattened_citations[:10],
+            "claim_citations": claim_results,
+            "verification_mode": "llm_rag",
         },
         "bias": {
             "bias_score": 0.5,
