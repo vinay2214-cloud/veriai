@@ -29,11 +29,17 @@ PUBLIC_ROUTE_PREFIXES = (
     "/api/review",
 )
 
+_JWT_SECRET_WARNED = False
 
-def _jwt_secret() -> str:
+
+def _jwt_secret() -> Optional[str]:
+    global _JWT_SECRET_WARNED
     secret = os.getenv("JWT_SECRET", "").strip()
     if not secret:
-        raise RuntimeError("JWT_SECRET is not configured.")
+        if not _JWT_SECRET_WARNED:
+            print("WARNING: JWT_SECRET is not configured. Auth-protected routes are disabled.")
+            _JWT_SECRET_WARNED = True
+        return None
     return secret
 
 
@@ -50,6 +56,12 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 def _make_token(payload: Dict[str, Any], expires_delta: timedelta, token_type: str) -> str:
+    secret = _jwt_secret()
+    if not secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication is disabled: JWT_SECRET not configured.",
+        )
     now = datetime.now(timezone.utc)
     body = dict(payload)
     body.update(
@@ -59,7 +71,7 @@ def _make_token(payload: Dict[str, Any], expires_delta: timedelta, token_type: s
             "exp": int((now + expires_delta).timestamp()),
         }
     )
-    return jwt.encode(body, _jwt_secret(), algorithm=JWT_ALGORITHM)
+    return jwt.encode(body, secret, algorithm=JWT_ALGORITHM)
 
 
 def make_access_token(payload: Dict[str, Any]) -> str:
@@ -94,6 +106,14 @@ async def get_current_user(
         print(f"WARNING: lazy_cleanup failed: {exc}")
 
     is_public = _is_public_route(request.url.path)
+    secret = _jwt_secret()
+    if not secret:
+        if is_public:
+            return None
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication is disabled: JWT_SECRET not configured.",
+        )
 
     if credentials is None or not credentials.credentials:
         if is_public:
@@ -101,7 +121,7 @@ async def get_current_user(
         raise _unauthorized("Missing bearer token")
 
     try:
-        payload = jwt.decode(credentials.credentials, _jwt_secret(), algorithms=[JWT_ALGORITHM])
+        payload = jwt.decode(credentials.credentials, secret, algorithms=[JWT_ALGORITHM])
         token_type = payload.get("type")
         if token_type not in {"access", "refresh"}:
             raise JWTError("Invalid token type")

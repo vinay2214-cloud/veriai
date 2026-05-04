@@ -8,16 +8,18 @@ from threading import Lock
 from typing import Dict, List, Optional, Tuple
 import numpy as np
 import faiss
+from fastapi import HTTPException, status
 from ..config import DB_PATH, RAG_SIMILARITY_THRESHOLD
 
 try:
-    import google.generativeai as genai
+    from google import genai
 except Exception:  # pragma: no cover
     genai = None
 
 _KB_CACHE: Optional[Tuple[faiss.IndexFlatIP, List[Dict[str, str]]]] = None
 _GEMINI_LOCK = Lock()
-_GEMINI_CONFIGURED = False
+_GEMINI_CLIENT = None
+_GEMINI_CLIENT_INITIALIZED = False
 EMBED_MODEL_NAME = os.getenv("VERIAI_EMBED_MODEL", "models/embedding-001")
 EMBED_DIMENSION = 768
 
@@ -32,43 +34,63 @@ def _gemini_api_key() -> str:
     return (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip()
 
 
-def _configure_gemini(api_key: str):
-    global _GEMINI_CONFIGURED
-    if _GEMINI_CONFIGURED:
-        return
-
-    if genai is None:
-        raise RuntimeError("google-generativeai is not installed.")
-    if not api_key:
-        raise RuntimeError("Missing GEMINI_API_KEY (or GOOGLE_API_KEY).")
-
+def _get_gemini_client():
+    global _GEMINI_CLIENT_INITIALIZED, _GEMINI_CLIENT
+    if _GEMINI_CLIENT_INITIALIZED:
+        return _GEMINI_CLIENT
     with _GEMINI_LOCK:
-        if not _GEMINI_CONFIGURED:
-            genai.configure(api_key=api_key)
-            _GEMINI_CONFIGURED = True
+        if _GEMINI_CLIENT_INITIALIZED:
+            return _GEMINI_CLIENT
+        api_key = _gemini_api_key()
+        if genai is None:
+            print("WARNING: google-genai is not installed. Truth-check endpoints will return 503.")
+            _GEMINI_CLIENT = None
+        elif not api_key:
+            print("WARNING: GEMINI_API_KEY is not configured. Truth-check endpoints will return 503.")
+            _GEMINI_CLIENT = None
+        else:
+            _GEMINI_CLIENT = genai.Client(api_key=api_key)
+        _GEMINI_CLIENT_INITIALIZED = True
+        return _GEMINI_CLIENT
+
+
+def _extract_embedding_values(response) -> List[float] | None:
+    embeddings = getattr(response, "embeddings", None)
+    if embeddings:
+        first = embeddings[0]
+        values = getattr(first, "values", None)
+        if values is not None:
+            return values
+    embedding = getattr(response, "embedding", None)
+    if embedding is not None:
+        values = getattr(embedding, "values", None)
+        if values is not None:
+            return values
+    return None
 
 
 async def get_gemini_embedding(text: str) -> np.ndarray:
-    api_key = _gemini_api_key()
-    if not api_key:
-        raise RuntimeError("Missing GEMINI_API_KEY (or GOOGLE_API_KEY).")
+    client = _get_gemini_client()
+    if client is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Gemini API Key not configured",
+        )
 
     payload = text.strip()
     if not payload:
         return np.zeros((EMBED_DIMENSION,), dtype=np.float32)
 
     def _embed_call() -> np.ndarray:
-        _configure_gemini(api_key)
-        response = genai.embed_content(
+        response = client.models.embed_content(
             model=EMBED_MODEL_NAME,
-            content=payload,
-            task_type="retrieval_document",
+            contents=[payload],
         )
-        embedding = response.get("embedding") if isinstance(response, dict) else None
-        if embedding is None:
+        values = _extract_embedding_values(response)
+        if values is None:
             raise RuntimeError(f"Gemini embedding response missing embedding vector for model '{EMBED_MODEL_NAME}'.")
 
-        vector = np.asarray(embedding, dtype=np.float32)
+        vector = np.asarray(values, dtype=np.float32)
         if vector.ndim != 1:
             raise RuntimeError("Gemini embedding response is not a 1D vector.")
         if vector.shape[0] != EMBED_DIMENSION:
@@ -127,6 +149,8 @@ async def verify_claims(claim: str, top_k: int = 3) -> Dict:
     """Verify a claim against KB using semantic nearest-neighbor retrieval."""
     try:
         result = await _load_knowledge_base()
+    except HTTPException:
+        raise
     except Exception as exc:
         return {
             "truth_score": 0.5,
@@ -187,3 +211,6 @@ async def verify_claims(claim: str, top_k: int = 3) -> Dict:
         "retrieved_context": retrieved_context,
         "embedding_model": EMBED_MODEL_NAME,
     }
+
+
+_get_gemini_client()

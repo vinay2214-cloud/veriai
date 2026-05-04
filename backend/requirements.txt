@@ -9,12 +9,14 @@ aiosqlite
 SQLAlchemy
 asyncpg
 faiss-cpu
-google-generativeai
+google-genai
 litellm
 weasyPrint
 pandas
 reportlab
 pytest
 httpx
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
 lime; python_version < "3.13"
 shap; python_version < "3.13"
