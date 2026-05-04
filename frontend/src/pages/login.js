@@ -3,36 +3,80 @@ export async function renderLogin(rootEl, api) {
     rootEl.style.padding = '0';
     rootEl.style.height = '100vh';
     rootEl.style.overflow = 'hidden';
-    
+
     rootEl.innerHTML = `
-        <div style="position:fixed; inset:0; background:#050510; z-index:0;">
-            <div style="position:absolute; inset:0; background-image:linear-gradient(rgba(100,100,255,0.08) 1px,transparent 1px),linear-gradient(90deg,rgba(100,100,255,0.08) 1px,transparent 1px); background-size:80px 80px; transform:perspective(600px) rotateX(60deg) scale(2.5) translateY(-100px); transform-origin:center top;"></div>
-            <div style="position:absolute; inset:0; background:linear-gradient(to top,transparent 20%,#050510 90%);"></div>
+        <!-- Animated grid background -->
+        <div class="login-bg">
+            <div class="login-grid"></div>
+            <div class="login-grid-fade"></div>
+            <div class="login-orb login-orb-1"></div>
+            <div class="login-orb login-orb-2"></div>
         </div>
-        <div style="position:relative; z-index:10; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh;">
-            <h1 style="font-size:3.5rem; font-weight:700; color:#fff; text-shadow:0 0 20px rgba(6,182,212,0.8),0 0 60px rgba(6,182,212,0.4); margin-bottom:2.5rem; letter-spacing:2px; font-family:var(--font-body);">VeriAI</h1>
-            <div style="width:100%; max-width:400px; background:rgba(15,20,35,0.85); backdrop-filter:blur(20px); border:1px solid rgba(255,255,255,0.1); border-radius:var(--radius-lg); padding:2.5rem 2rem; box-shadow:0 25px 50px -12px rgba(0,0,0,0.5);">
+
+        <div class="login-wrapper">
+            <!-- Branding Section -->
+            <div class="login-brand-section">
+                <div class="login-logo-mark">
+                    <svg width="44" height="44" viewBox="0 0 28 28" fill="none">
+                        <path d="M4 14l6 8 14-16" stroke="url(#loginGrad)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                        <defs><linearGradient id="loginGrad" x1="0" y1="0" x2="28" y2="28"><stop stop-color="#06b6d4"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient></defs>
+                    </svg>
+                </div>
+                <h1 class="login-title">VeriAI</h1>
+                <p class="login-subtitle">AI Trust & Safety Auditor</p>
+            </div>
+
+            <!-- Login Card -->
+            <div class="login-card-v2">
+                <h2 class="login-card-heading">Welcome back</h2>
+                <p class="login-card-subtext">Sign in to your audit dashboard</p>
+
                 <form id="login-form">
-                    <div class="form-group">
-                        <label class="form-label" style="color:#e2e8f0;">Email</label>
-                        <input type="email" class="form-input" placeholder="Email" required style="background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1);" />
+                    <div class="login-field">
+                        <label class="login-label">Email</label>
+                        <div class="login-input-wrap">
+                            <span class="login-input-icon">✉</span>
+                            <input type="email" class="login-input" placeholder="you@company.com" required />
+                        </div>
                     </div>
-                    <div class="form-group" style="margin-bottom:2rem;">
-                        <label class="form-label" style="color:#e2e8f0;">Password</label>
-                        <input type="password" class="form-input" placeholder="Password" required style="background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1);" />
+                    <div class="login-field">
+                        <label class="login-label">Password</label>
+                        <div class="login-input-wrap">
+                            <span class="login-input-icon">🔒</span>
+                            <input type="password" class="login-input" placeholder="••••••••" required />
+                        </div>
                     </div>
-                    <button type="submit" style="width:100%; padding:0.85rem; border-radius:999px; background:linear-gradient(90deg,#8b5cf6,#3b82f6); color:white; font-weight:600; font-size:1rem; border:none; cursor:pointer;">Continue</button>
-                    <a href="#" style="display:block; text-align:center; margin-top:1.5rem; color:#60a5fa; font-size:0.85rem; text-decoration:none;">Forgot Password?</a>
+                    <div class="login-options">
+                        <label class="login-remember"><input type="checkbox" checked /> Remember me</label>
+                        <a href="#" class="login-forgot">Forgot password?</a>
+                    </div>
+                    <button type="submit" class="login-submit-btn">
+                        <span>Continue to Dashboard</span>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                    </button>
                 </form>
+
+                <div class="login-divider"><span>Secured by VeriAI</span></div>
+
+                <div class="login-trust-badges">
+                    <span class="login-trust-badge">🔐 AES-256</span>
+                    <span class="login-trust-badge">🛡️ JWT Auth</span>
+                    <span class="login-trust-badge">📋 SOC2 Ready</span>
+                </div>
             </div>
         </div>
     `;
 
     document.getElementById('login-form').addEventListener('submit', (e) => {
         e.preventDefault();
-        rootEl.style.padding = '';
-        rootEl.style.height = '';
-        rootEl.style.overflow = '';
-        window.location.hash = '/dashboard';
+        const btn = e.target.querySelector('.login-submit-btn');
+        btn.innerHTML = '<div class="loading-spinner" style="width:18px;height:18px;border-width:2px;"></div> Authenticating...';
+        btn.disabled = true;
+        setTimeout(() => {
+            rootEl.style.padding = '';
+            rootEl.style.height = '';
+            rootEl.style.overflow = '';
+            window.location.hash = '/dashboard';
+        }, 800);
     });
 }

@@ -18,7 +18,7 @@ export async function renderDashboard(rootEl, api) {
 
     rootEl.innerHTML = `
         <!-- Hero Stats Row -->
-        <div class="stats-grid">
+        <div class="stats-grid stagger-in">
             <div class="stat-card purple"><div class="stat-label">Total Audits</div><div class="stat-value purple">${stats.total_audits || 0}</div></div>
             <div class="stat-card cyan"><div class="stat-label">Avg Trust Score</div><div class="stat-value cyan">${(stats.avg_trust * 100).toFixed(1)}%</div></div>
             <div class="stat-card amber" id="bias-stat-card"><div class="stat-label">Live ML Bias Score</div><div class="stat-value amber" id="live-bias-value">${biasData ? (biasData.bias_score * 100).toFixed(1) + '%' : 'N/A'}</div></div>

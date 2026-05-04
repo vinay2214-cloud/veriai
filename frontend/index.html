@@ -5,13 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VeriAI — AI Trust Auditor Platform</title>
     <meta name="description" content="VeriAI detects, scores, explains, and corrects bias and hallucinations in AI systems. Comprehensive AI governance and trust scoring." />
-    <link rel="stylesheet" href="src/style.css?v=11" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="src/style.css?v=12" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
 <body>
     <!-- Ambient background glow -->
     <div class="ambient-glow"></div>
+
+    <!-- Mobile hamburger button -->
+    <button class="hamburger-btn" id="hamburger-btn" aria-label="Toggle menu">
+        <span></span><span></span><span></span>
+    </button>
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
     <div class="app-layout">
         <!-- Sidebar Navigation -->
@@ -77,6 +85,31 @@
         </main>
     </div>
 
-    <script src="src/main.js?v=11" type="module"></script>
+    <script src="src/main.js?v=12" type="module"></script>
+    <script>
+    // Mobile hamburger menu toggle
+    document.addEventListener('DOMContentLoaded', () => {
+        const btn = document.getElementById('hamburger-btn');
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('sidebar-overlay');
+        if (btn && sidebar && overlay) {
+            btn.addEventListener('click', () => {
+                sidebar.classList.toggle('open');
+                overlay.classList.toggle('visible');
+            });
+            overlay.addEventListener('click', () => {
+                sidebar.classList.remove('open');
+                overlay.classList.remove('visible');
+            });
+            // Close on nav click (mobile)
+            sidebar.querySelectorAll('.nav-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    sidebar.classList.remove('open');
+                    overlay.classList.remove('visible');
+                });
+            });
+        }
+    });
+    </script>
 </body>
 </html>

@@ -1,10 +1,10 @@
-import { renderLogin } from './pages/login.js?v=11';
-import { renderDashboard } from './pages/dashboard.js?v=11';
-import { renderAuditPage } from './pages/audit.js?v=11';
-import { renderReportsPage } from './pages/reports.js?v=11';
-import { renderFeedbackPage } from './pages/feedback.js?v=11';
-import { renderSettingsPage } from './pages/settings.js?v=11';
-import { renderReviewPage } from './pages/review.js?v=11';
+import { renderLogin } from './pages/login.js?v=12';
+import { renderDashboard } from './pages/dashboard.js?v=12';
+import { renderAuditPage } from './pages/audit.js?v=12';
+import { renderReportsPage } from './pages/reports.js?v=12';
+import { renderFeedbackPage } from './pages/feedback.js?v=12';
+import { renderSettingsPage } from './pages/settings.js?v=12';
+import { renderReviewPage } from './pages/review.js?v=12';
 
 export const API_BASE = window.location.origin + '/api';
 
@@ -80,17 +80,23 @@ async function router() {
 
     if (route) {
         const ambientGlow = document.querySelector('.ambient-glow');
+        const hamburgerBtn = document.getElementById('hamburger-btn');
+        const sidebarOverlay = document.getElementById('sidebar-overlay');
         // Toggle Layout for Landing Page
         if (baseRoute === '/') {
             if (sidebar) sidebar.style.display = 'none';
             if (topBar) topBar.style.display = 'none';
             if (ambientGlow) ambientGlow.style.display = 'none';
+            if (hamburgerBtn) hamburgerBtn.style.display = 'none';
+            if (sidebarOverlay) sidebarOverlay.style.display = 'none';
             document.querySelector('.main-content').style.marginLeft = '0';
             document.querySelector('.content-area').style.padding = '0';
         } else {
             if (sidebar) sidebar.style.display = 'flex';
             if (topBar) topBar.style.display = 'flex';
             if (ambientGlow) ambientGlow.style.display = 'block';
+            if (hamburgerBtn) hamburgerBtn.style.display = '';
+            if (sidebarOverlay) sidebarOverlay.style.display = '';
             document.querySelector('.main-content').style.marginLeft = 'var(--sidebar-width)';
             document.querySelector('.content-area').style.padding = '2rem';
         }
