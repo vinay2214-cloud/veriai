@@ -16,7 +16,7 @@ class LLMAuditRequest(BaseModel):
 @router.post("/audit-llm-output")
 async def audit_llm_endpoint(request: LLMAuditRequest):
     try:
-        result = audit_llm_output(
+        result = await audit_llm_output(
             prompt=request.prompt.strip(),
             output_text=request.output_text.strip(),
             model_name=request.model_name.strip(),

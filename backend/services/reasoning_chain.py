@@ -154,9 +154,9 @@ async def run_audit(input_text: str, num_clusters: int = None, depth: str = "sta
     async def run_truth():
         t = time.time()
         if text_mode:
-            result = await loop.run_in_executor(_executor, verify_text_with_llm_rag, input_text)
+            result = await verify_text_with_llm_rag(input_text)
         else:
-            result = await loop.run_in_executor(_executor, verify_claims, input_text)
+            result = await verify_claims(input_text)
         step_timings["truth"] = round(time.time() - t, 3)
         return result
 
@@ -308,7 +308,7 @@ async def run_audit(input_text: str, num_clusters: int = None, depth: str = "sta
     # ------------------------------------------------------------------
     if decision == "correct" and depth != "fast":
         # Re‑run truth check on corrected output
-        truth_recheck = verify_claims(corrected_output)
+        truth_recheck = await verify_claims(corrected_output)
         new_score = compute_trust_score(
             truth=truth_recheck["truth_score"],
             bias=max(bias_score * 0.6, 0),  # bias reduced after correction

@@ -28,7 +28,7 @@ async def correct(request: CorrectionRequest):
     else:
         return {"error": "Provide either audit_id or input_text"}
 
-    truth_result = verify_claims(input_text)
+    truth_result = await verify_claims(input_text)
     raw = {
         "input_text": input_text,
         "bias": {"feature_importance": {}},

@@ -9,7 +9,7 @@ aiosqlite
 SQLAlchemy
 asyncpg
 faiss-cpu
-sentence-transformers
+google-generativeai
 litellm
 weasyPrint
 pandas

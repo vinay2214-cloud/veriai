@@ -1,9 +1,9 @@
 """Truth verification utilities using semantic embeddings + FAISS."""
 from __future__ import annotations
 
+import asyncio
 import os
 import sqlite3
-from pathlib import Path
 from threading import Lock
 from typing import Dict, List, Optional, Tuple
 import numpy as np
@@ -11,66 +11,90 @@ import faiss
 from ..config import DB_PATH, RAG_SIMILARITY_THRESHOLD
 
 try:
-    from sentence_transformers import SentenceTransformer
+    import google.generativeai as genai
 except Exception:  # pragma: no cover
-    SentenceTransformer = None
+    genai = None
 
 _KB_CACHE: Optional[Tuple[faiss.IndexFlatIP, List[Dict[str, str]]]] = None
-_EMBEDDER = None
-_EMBEDDER_LOCK = Lock()
-EMBED_MODEL_NAME = os.getenv("VERIAI_EMBED_MODEL", "all-MiniLM-L6-v2")
+_GEMINI_LOCK = Lock()
+_GEMINI_CONFIGURED = False
+EMBED_MODEL_NAME = os.getenv("VERIAI_EMBED_MODEL", "models/embedding-001")
+EMBED_DIMENSION = 768
 
 
 def invalidate_cache():
     """Clear the KB cache so the next call reloads from DB."""
-    global _KB_CACHE, _EMBEDDER
+    global _KB_CACHE
     _KB_CACHE = None
-    # Keep the model warm by default. This env flag is useful in low-memory deploys.
-    if os.getenv("VERIAI_UNLOAD_EMBEDDER", "0") == "1":
-        _EMBEDDER = None
 
 
-def _model_cache_dir() -> Path:
-    cache_dir = Path(__file__).resolve().parent.parent / "data" / "model_cache"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    return cache_dir
+def _gemini_api_key() -> str:
+    return (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip()
 
 
-def _get_embedder():
-    global _EMBEDDER
-    if _EMBEDDER is not None:
-        return _EMBEDDER
+def _configure_gemini(api_key: str):
+    global _GEMINI_CONFIGURED
+    if _GEMINI_CONFIGURED:
+        return
 
-    if SentenceTransformer is None:
-        raise RuntimeError("sentence-transformers is not installed.")
+    if genai is None:
+        raise RuntimeError("google-generativeai is not installed.")
+    if not api_key:
+        raise RuntimeError("Missing GEMINI_API_KEY (or GOOGLE_API_KEY).")
 
-    with _EMBEDDER_LOCK:
-        if _EMBEDDER is None:
-            _EMBEDDER = SentenceTransformer(
-                EMBED_MODEL_NAME,
-                cache_folder=str(_model_cache_dir()),
-                device="cpu",
+    with _GEMINI_LOCK:
+        if not _GEMINI_CONFIGURED:
+            genai.configure(api_key=api_key)
+            _GEMINI_CONFIGURED = True
+
+
+async def get_gemini_embedding(text: str) -> np.ndarray:
+    api_key = _gemini_api_key()
+    if not api_key:
+        raise RuntimeError("Missing GEMINI_API_KEY (or GOOGLE_API_KEY).")
+
+    payload = text.strip()
+    if not payload:
+        return np.zeros((EMBED_DIMENSION,), dtype=np.float32)
+
+    def _embed_call() -> np.ndarray:
+        _configure_gemini(api_key)
+        response = genai.embed_content(
+            model=EMBED_MODEL_NAME,
+            content=payload,
+            task_type="retrieval_document",
+        )
+        embedding = response.get("embedding") if isinstance(response, dict) else None
+        if embedding is None:
+            raise RuntimeError(f"Gemini embedding response missing embedding vector for model '{EMBED_MODEL_NAME}'.")
+
+        vector = np.asarray(embedding, dtype=np.float32)
+        if vector.ndim != 1:
+            raise RuntimeError("Gemini embedding response is not a 1D vector.")
+        if vector.shape[0] != EMBED_DIMENSION:
+            raise RuntimeError(
+                f"Unexpected embedding dimension {vector.shape[0]} from '{EMBED_MODEL_NAME}'. "
+                f"Expected {EMBED_DIMENSION}."
             )
-    return _EMBEDDER
+        norm = np.linalg.norm(vector)
+        if norm > 0:
+            vector = vector / norm
+        return vector
+
+    return await asyncio.to_thread(_embed_call)
 
 
-def _encode_texts(texts: List[str]) -> np.ndarray:
+async def _encode_texts(texts: List[str]) -> np.ndarray:
     if not texts:
-        return np.zeros((0, 384), dtype=np.float32)
-    model = _get_embedder()
-    vectors = model.encode(
-        texts,
-        convert_to_numpy=True,
-        normalize_embeddings=True,
-        show_progress_bar=False,
-    )
-    matrix = np.asarray(vectors, dtype=np.float32)
-    if matrix.ndim == 1:
-        matrix = matrix.reshape(1, -1)
-    return matrix
+        return np.zeros((0, EMBED_DIMENSION), dtype=np.float32)
+
+    vectors = []
+    for text in texts:
+        vectors.append(await get_gemini_embedding(text))
+    return np.vstack(vectors).astype(np.float32)
 
 
-def _load_knowledge_base():
+async def _load_knowledge_base():
     """Load KB rows and build a FAISS index from semantic embeddings."""
     global _KB_CACHE
     if _KB_CACHE is not None:
@@ -91,18 +115,18 @@ def _load_knowledge_base():
     records = [{"title": r[0], "content": r[1], "source": r[2]} for r in rows]
     texts = [rec["content"] for rec in records]
 
-    matrix = _encode_texts(texts)
-    index = faiss.IndexFlatIP(matrix.shape[1])  # 384-dim for MiniLM by default
+    matrix = await _encode_texts(texts)
+    index = faiss.IndexFlatIP(EMBED_DIMENSION)
     index.add(matrix)
 
     _KB_CACHE = (index, records)
     return _KB_CACHE
 
 
-def verify_claims(claim: str, top_k: int = 3) -> Dict:
+async def verify_claims(claim: str, top_k: int = 3) -> Dict:
     """Verify a claim against KB using semantic nearest-neighbor retrieval."""
     try:
-        result = _load_knowledge_base()
+        result = await _load_knowledge_base()
     except Exception as exc:
         return {
             "truth_score": 0.5,
@@ -127,7 +151,7 @@ def verify_claims(claim: str, top_k: int = 3) -> Dict:
             "retrieved_context": [],
         }
 
-    query_dense = _encode_texts([claim])
+    query_dense = await _encode_texts([claim])
     D, I = faiss_index.search(query_dense, min(top_k, len(records)))
 
     top_sims = D[0]

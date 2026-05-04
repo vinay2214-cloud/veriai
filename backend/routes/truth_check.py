@@ -17,5 +17,5 @@ class TruthCheckRequest(BaseModel):
 async def truth_check(request: TruthCheckRequest):
     """Verify a single claim against the knowledge base."""
     invalidate_cache()
-    result = verify_text_with_llm_rag(request.claim)
+    result = await verify_text_with_llm_rag(request.claim)
     return result

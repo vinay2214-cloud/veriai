@@ -143,10 +143,10 @@ def _verify_claim_with_context(
     }
 
 
-def verify_text_with_llm_rag(text: str, top_k: int = 3, model: str = DEFAULT_LLM_MODEL) -> Dict[str, Any]:
+async def verify_text_with_llm_rag(text: str, top_k: int = 3, model: str = DEFAULT_LLM_MODEL) -> Dict[str, Any]:
     claims = extract_verifiable_claims(text, model=model)
     if not claims:
-        return verify_claims(text, top_k=top_k)
+        return await verify_claims(text, top_k=top_k)
 
     claim_citations: List[Dict[str, Any]] = []
     groundedness_values: List[float] = []
@@ -156,7 +156,7 @@ def verify_text_with_llm_rag(text: str, top_k: int = 3, model: str = DEFAULT_LLM
     verdict_score = {"Supported": 1.0, "Contradicted": 0.0, "Unverifiable": 0.4}
 
     for claim in claims:
-        retrieval = verify_claims(claim, top_k=top_k)
+        retrieval = await verify_claims(claim, top_k=top_k)
         contexts = retrieval.get("retrieved_context", [])
         groundedness = float(retrieval.get("groundedness", 0.0))
         groundedness_values.append(groundedness)
@@ -196,9 +196,9 @@ def verify_text_with_llm_rag(text: str, top_k: int = 3, model: str = DEFAULT_LLM
     }
 
 
-def verify_single_claim_with_llm_rag(claim: str, top_k: int = 3, model: str = DEFAULT_LLM_MODEL) -> Dict[str, Any]:
+async def verify_single_claim_with_llm_rag(claim: str, top_k: int = 3, model: str = DEFAULT_LLM_MODEL) -> Dict[str, Any]:
     """Verify one claim with retrieval + LLM verdict."""
-    retrieval = verify_claims(claim, top_k=top_k)
+    retrieval = await verify_claims(claim, top_k=top_k)
     contexts = retrieval.get("retrieved_context", [])
     groundedness = float(retrieval.get("groundedness", 0.0))
     decision = _verify_claim_with_context(claim, contexts, model=model)

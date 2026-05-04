@@ -205,7 +205,7 @@ async def knowledge_base_stats():
     # indexed state after startup, before the first truth-check request.
     from ..services import truth_service
     if total > 0 and truth_service._KB_CACHE is None:
-        truth_service._load_knowledge_base()
+        await truth_service._load_knowledge_base()
     faiss_status = "connected" if truth_service._KB_CACHE is not None else "disconnected"
     
     conn.close()
@@ -215,7 +215,7 @@ async def knowledge_base_stats():
         "recent_articles": recent,
         "faiss_status": faiss_status,
         "index_type": "FAISS IndexFlatIP (Cosine Similarity)",
-        "vectorizer": "SentenceTransformer all-MiniLM-L6-v2 (384-dim)"
+        "vectorizer": "Gemini models/embedding-001 (768-dim)"
     }
 
 
@@ -226,7 +226,7 @@ async def rebuild_faiss_index():
     
     # Trigger a rebuild by calling verify_claims with a dummy query
     from ..services.truth_service import verify_claims
-    result = verify_claims("test rebuild query")
+    result = await verify_claims("test rebuild query")
     
     from ..services.truth_service import _KB_CACHE
     status = "connected" if _KB_CACHE is not None else "failed"

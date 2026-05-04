@@ -22,7 +22,7 @@ def _build_corrected_output(output_text: str, claim_results: List[Dict[str, Any]
     return corrected
 
 
-def audit_llm_output(prompt: str, output_text: str, model_name: str = "unknown-llm") -> Dict[str, Any]:
+async def audit_llm_output(prompt: str, output_text: str, model_name: str = "unknown-llm") -> Dict[str, Any]:
     claims = _extract_claims(output_text)
     if not claims:
         raise ValueError("LLM output did not contain any claim-like sentences.")
@@ -34,7 +34,7 @@ def audit_llm_output(prompt: str, output_text: str, model_name: str = "unknown-l
     ]
 
     for claim in claims:
-        verification = verify_single_claim_with_llm_rag(claim)
+        verification = await verify_single_claim_with_llm_rag(claim)
         truth_score = float(verification.get("truth_score", 0.0))
         citations = verification.get("citations", [])
         best = citations[0] if citations else {}
