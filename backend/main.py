@@ -127,9 +127,13 @@ async def lifespan(app: FastAPI):
     # --- Startup ---
     verify_security_config()
     await init_sqlalchemy_models()
-    if not DATABASE_URL:
+    # Always init SQLite — dashboard/review/feedback routes use aiosqlite directly
+    try:
         await init_db()
         seed_database()
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("SQLite init/seed failed (may be OK on PostgreSQL-only deploys): %s", exc)
     yield
     # --- Shutdown ---
     await close_engine()

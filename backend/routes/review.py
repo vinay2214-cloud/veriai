@@ -52,7 +52,10 @@ async def get_review_queue():
 @router.get("/review/stats")
 async def review_stats():
     """Return pending/approved/rejected counts."""
-    return await db.get_review_stats()
+    try:
+        return await db.get_review_stats()
+    except Exception:
+        return {"pending": 0, "approved": 0, "rejected": 0}
 
 
 @router.post("/review/{audit_id}/approve")
