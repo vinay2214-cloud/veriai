@@ -32,12 +32,19 @@ def verify_security_config() -> None:
         else:
             raise RuntimeError(msg)
 
-    datasets_dir = Path("/data/datasets")
+    datasets_dir = Path(os.getenv("DATASETS_DIR", "/data/datasets"))
     try:
         datasets_dir.mkdir(parents=True, exist_ok=True)
         os.chmod(datasets_dir, 0o700)
     except Exception as exc:
-        msg = f"Failed to initialize secure datasets directory at {datasets_dir}: {exc}"
+        # Fallback to /tmp on read-only filesystems
+        fallback = Path("/tmp/datasets")
+        try:
+            fallback.mkdir(parents=True, exist_ok=True)
+            os.environ["DATASETS_DIR"] = str(fallback)
+            msg = f"Using fallback datasets dir {fallback} (original {datasets_dir} failed: {exc})"
+        except Exception:
+            msg = f"Failed to initialize secure datasets directory at {datasets_dir}: {exc}"
         if demo_mode:
             print(f"WARNING: {msg}")
         else:

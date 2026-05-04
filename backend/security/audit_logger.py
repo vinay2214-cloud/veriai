@@ -9,7 +9,11 @@ from typing import Any, Dict
 
 
 class ChainedAuditLogger:
-    def __init__(self, log_path: str = "/data/datasets/audit.log.jsonl") -> None:
+    def __init__(self, log_path: str = None) -> None:
+        if log_path is None:
+            import os
+            datasets_dir = os.getenv("DATASETS_DIR", "/tmp/datasets")
+            log_path = f"{datasets_dir}/audit.log.jsonl"
         self.log_path = Path(log_path)
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
 

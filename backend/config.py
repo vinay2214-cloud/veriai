@@ -12,8 +12,26 @@ from pathlib import Path
 # Database configuration
 # ---------------------------------------------------------------------------
 # SQLite file stored in the project root for local development.
+# On Render (read-only filesystem), falls back to /tmp.
 BASE_DIR = Path(__file__).resolve().parent.parent
-DB_PATH = os.getenv("VERIAI_DB_PATH", str(BASE_DIR / "veriai.db"))
+_default_db = str(BASE_DIR / "veriai.db")
+
+def _resolve_db_path() -> str:
+    """Return a writable SQLite path."""
+    explicit = os.getenv("VERIAI_DB_PATH", "").strip()
+    if explicit:
+        return explicit
+    # Check if project root is writable
+    try:
+        test_file = BASE_DIR / ".write_test"
+        test_file.touch()
+        test_file.unlink()
+        return _default_db
+    except OSError:
+        # Read-only filesystem (Render free tier) — use /tmp
+        return "/tmp/veriai.db"
+
+DB_PATH = _resolve_db_path()
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 
 

@@ -15,7 +15,8 @@ from .encryption import DatasetEncryptor
 from .file_validator import sanitize_dataframe, scan_for_injection, validate_upload
 from .redactor import redact_for_gcp
 
-DATASETS_ROOT = Path("/data/datasets")
+import os as _os
+DATASETS_ROOT = Path(_os.getenv("DATASETS_DIR", "/tmp/datasets"))
 
 
 def _wipe_bytearray(buf: bytearray | None) -> None:

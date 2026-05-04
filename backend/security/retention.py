@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict
 
-DATASETS_ROOT = Path("/data/datasets")
+DATASETS_ROOT = Path(os.getenv("DATASETS_DIR", "/tmp/datasets"))
 LAST_CLEANUP_FILE = DATASETS_ROOT / ".last_cleanup"
 CLEANUP_INTERVAL_SECONDS = 24 * 60 * 60
 
