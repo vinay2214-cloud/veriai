@@ -47,7 +47,7 @@ export async function renderDashboard(rootEl, api) {
             <div class="dv-panel dv-panel-trust">
                 <div class="dv-panel-head"><span class="dv-panel-title">System Trust</span></div>
                 <div class="dv-trust-gauge-wrap">
-                    <canvas id="trustChart"></canvas>
+                    <canvas id="trustChart" width="280" height="170"></canvas>
                     <div class="dv-trust-center">
                         <div class="dv-trust-pct">${trustPct}%</div>
                         <div class="dv-trust-label">TRUST SCORE</div>
@@ -55,9 +55,9 @@ export async function renderDashboard(rootEl, api) {
                     </div>
                 </div>
                 <div class="dv-trust-metrics">
-                    <span><span class="dv-legend-dot" style="background:#10b981"></span>Bias (${(100 - parseFloat(biasPct)).toFixed(0)}%)</span>
-                    <span><span class="dv-legend-dot" style="background:#06b6d4"></span>Explainability (${dpVal}%)</span>
-                    <span><span class="dv-legend-dot" style="background:#8b5cf6"></span>Performance (${eoVal}%)</span>
+                    <span><span class="dv-legend-dot" style="background:#10b981"></span>Bias Fairness (${(100 - parseFloat(biasPct)).toFixed(0)}%)</span>
+                    <span><span class="dv-legend-dot" style="background:#06b6d4"></span>Truth Score (${((s.avg_truth||0)*100).toFixed(0)}%)</span>
+                    <span><span class="dv-legend-dot" style="background:#8b5cf6"></span>Accuracy (${eoVal}%)</span>
                 </div>
             </div>
 
@@ -115,6 +115,7 @@ export async function renderDashboard(rootEl, api) {
                         <button class="method-btn active" data-method="linear">Linear</button>
                         <button class="method-btn" data-method="coefficient">Coeff</button>
                         <button class="method-btn" data-method="permutation">Perm</button>
+                        <button class="method-btn" data-method="lime">LIME</button>
                     </div>
                 </div>
                 <div id="shap-chart-container" style="min-height:180px">
@@ -301,8 +302,11 @@ function initCharts(stats, bias, fairness, drift, recent) {
     const tCtx = document.getElementById('trustChart');
     if (tCtx) {
         const score = stats.avg_trust || 0;
-        const col = score >= 0.7 ? '#10b981' : score >= 0.5 ? '#f59e0b' : '#ef4444';
-        new Chart(tCtx, { type:'doughnut', data:{ datasets:[{ data:[score*100,(1-score)*100], backgroundColor:[col,'rgba(255,255,255,0.06)'], borderWidth:0, borderRadius:[8,0] }] }, options:{ cutout:'78%', rotation:-90, circumference:180, plugins:{legend:{display:false},tooltip:{enabled:false}}, layout:{padding:0} } });
+        const g = tCtx.getContext('2d').createLinearGradient(0, 0, 280, 0);
+        if (score >= 0.7) { g.addColorStop(0, '#059669'); g.addColorStop(1, '#10b981'); }
+        else if (score >= 0.5) { g.addColorStop(0, '#d97706'); g.addColorStop(1, '#f59e0b'); }
+        else { g.addColorStop(0, '#dc2626'); g.addColorStop(1, '#ef4444'); }
+        new Chart(tCtx, { type:'doughnut', data:{ datasets:[{ data:[score*100,(1-score)*100], backgroundColor:[g,'rgba(255,255,255,0.05)'], borderWidth:0, borderRadius:[10,0] }] }, options:{ cutout:'75%', rotation:-90, circumference:180, plugins:{legend:{display:false},tooltip:{enabled:false}}, layout:{padding:10}, responsive:false } });
     }
 
     // Drift Area Chart

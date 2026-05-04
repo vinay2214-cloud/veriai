@@ -1453,21 +1453,21 @@ tr:hover td { background: rgba(167, 139, 250, 0.04); }
 .dv-top-row { display:grid; grid-template-columns:1fr 1fr 1fr; gap:1.25rem; margin-bottom:1.25rem; }
 
 /* Trust Gauge */
-.dv-panel-trust { text-align:center; display:flex; flex-direction:column; align-items:center; }
-.dv-trust-gauge-wrap { position:relative; width:240px; height:135px; margin:0 auto; }
-.dv-trust-center { position:absolute; top:65%; left:50%; transform:translate(-50%,-50%); text-align:center; }
-.dv-trust-pct { font-size:2.5rem; font-weight:700; font-family:var(--font-mono); color:var(--text-primary); line-height:1; }
-.dv-trust-label { font-size:0.65rem; color:var(--text-muted); letter-spacing:0.12em; text-transform:uppercase; margin:0.15rem 0 0.35rem; }
+.dv-panel-trust { text-align:center; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.dv-trust-gauge-wrap { position:relative; width:280px; height:170px; margin:0.5rem auto 0; }
+.dv-trust-center { position:absolute; top:72%; left:50%; transform:translate(-50%,-50%); text-align:center; z-index:2; }
+.dv-trust-pct { font-size:3rem; font-weight:700; font-family:var(--font-mono); color:var(--text-primary); line-height:1; }
+.dv-trust-label { font-size:0.7rem; color:var(--text-muted); letter-spacing:0.14em; text-transform:uppercase; margin:0.25rem 0 0.4rem; }
 .dv-trust-level {
-  display:inline-block; padding:0.15rem 0.6rem; border-radius:4px;
-  font-size:0.6rem; font-weight:700; letter-spacing:0.08em;
+  display:inline-block; padding:0.2rem 0.75rem; border-radius:4px;
+  font-size:0.65rem; font-weight:700; letter-spacing:0.08em;
 }
-.dv-level-high { background:rgba(16,185,129,0.15); color:#10b981; }
-.dv-level-med { background:rgba(245,158,11,0.15); color:#f59e0b; }
-.dv-level-low { background:rgba(239,68,68,0.15); color:#ef4444; }
+.dv-level-high { background:rgba(16,185,129,0.18); color:#10b981; }
+.dv-level-med { background:rgba(245,158,11,0.18); color:#f59e0b; }
+.dv-level-low { background:rgba(239,68,68,0.18); color:#ef4444; }
 .dv-trust-metrics {
-  display:flex; gap:1rem; justify-content:center; margin-top:0.75rem;
-  font-size:0.7rem; color:var(--text-secondary);
+  display:flex; gap:1.25rem; justify-content:center; margin-top:0.5rem;
+  font-size:0.75rem; color:var(--text-secondary);
 }
 
 /* Drift Chart */
