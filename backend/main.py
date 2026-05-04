@@ -2,6 +2,9 @@
 Registers all routers, initialises the database, seeds data, and
 serves the frontend as static files.
 """
+import os
+os.environ['MPLCONFIGDIR'] = '/tmp/matplotlib'
+
 import time
 from contextlib import asynccontextmanager
 from collections import defaultdict, deque

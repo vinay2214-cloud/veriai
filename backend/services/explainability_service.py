@@ -10,16 +10,6 @@ import numpy as np
 
 from .training_service import get_live_model, preprocess_data, load_data
 
-try:
-    import shap  # type: ignore
-except Exception:
-    shap = None
-
-try:
-    from lime.lime_tabular import LimeTabularExplainer  # type: ignore
-except Exception:
-    LimeTabularExplainer = None
-
 _SHAP_CACHE: dict = {}
 _MODEL_VERSION: int = 0
 
@@ -43,8 +33,10 @@ def _coefficient_explanation(model, instance_scaled, feature_names):
 
 
 def _lime_explanation(model, X_train, instance_raw, feature_names):
-    if LimeTabularExplainer is None:
-        raise RuntimeError("LIME is unavailable.")
+    try:
+        from lime.lime_tabular import LimeTabularExplainer  # type: ignore
+    except Exception as exc:
+        raise RuntimeError("LIME is unavailable.") from exc
     explainer = LimeTabularExplainer(
         training_data=X_train,
         feature_names=feature_names,
@@ -66,8 +58,10 @@ def _lime_explanation(model, X_train, instance_raw, feature_names):
 
 
 def _shap_linear_explanation(model, X_train_scaled, instance_scaled, feature_names):
-    if shap is None:
-        raise RuntimeError("SHAP is unavailable.")
+    try:
+        import shap  # type: ignore
+    except Exception as exc:
+        raise RuntimeError("SHAP is unavailable.") from exc
     sample_size = min(100, X_train_scaled.shape[0])
     background = X_train_scaled[np.random.choice(X_train_scaled.shape[0], sample_size, replace=False)]
     explainer = shap.LinearExplainer(model, background)
