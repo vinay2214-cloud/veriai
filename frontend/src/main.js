@@ -1,10 +1,10 @@
-import { renderLogin } from './pages/login.js?v=12';
-import { renderDashboard } from './pages/dashboard.js?v=12';
-import { renderAuditPage } from './pages/audit.js?v=12';
-import { renderReportsPage } from './pages/reports.js?v=12';
-import { renderFeedbackPage } from './pages/feedback.js?v=12';
-import { renderSettingsPage } from './pages/settings.js?v=12';
-import { renderReviewPage } from './pages/review.js?v=12';
+import { renderLogin } from './pages/login.js?v=13';
+import { renderDashboard } from './pages/dashboard.js?v=13';
+import { renderAuditPage } from './pages/audit.js?v=13';
+import { renderReportsPage } from './pages/reports.js?v=13';
+import { renderFeedbackPage } from './pages/feedback.js?v=13';
+import { renderSettingsPage } from './pages/settings.js?v=13';
+import { renderReviewPage } from './pages/review.js?v=13';
 
 export const API_BASE = window.location.origin + '/api';
 
