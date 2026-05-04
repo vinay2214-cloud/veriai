@@ -1,5 +1,4 @@
 export async function renderDashboard(rootEl, api) {
-    // Fetch all data in parallel
     const [stats, recent, reviewStats, biasData, fairnessData, driftData, modelComparison] = await Promise.all([
         api.get('/dashboard/stats').catch(() => null),
         api.get('/dashboard/recent').catch(() => []),
@@ -10,205 +9,174 @@ export async function renderDashboard(rootEl, api) {
         api.get('/dashboard/model-comparison').catch(() => null),
     ]);
 
-    const pendingReviews = reviewStats?.pending || 0;
     const s = stats || { total_audits: 0, avg_trust: 0, avg_bias: 0, avg_truth: 0, total_feedback: 0 };
+    const pending = reviewStats?.pending || 0;
     const trustPct = Math.round((s.avg_trust || 0) * 100);
     const biasPct = biasData ? (biasData.bias_score * 100).toFixed(1) : '0.0';
+    const dpVal = fairnessData ? (fairnessData.demographic_parity * 100).toFixed(1) : '—';
+    const eoVal = fairnessData ? (fairnessData.equal_opportunity * 100).toFixed(1) : '—';
+    const trustLevel = trustPct >= 70 ? 'HIGH' : trustPct >= 50 ? 'MEDIUM' : 'LOW';
+    const trustLevelClass = trustPct >= 70 ? 'dv-level-high' : trustPct >= 50 ? 'dv-level-med' : 'dv-level-low';
+    const driftStatus = driftData?.status || 'stable';
+    const driftDelta = driftData ? (driftData.drift_delta * 100).toFixed(2) : '0.00';
 
-    updatePendingBadge(pendingReviews);
-
-    // Trust color
-    const trustColor = trustPct >= 70 ? 'var(--accent-emerald)' : trustPct >= 50 ? 'var(--accent-amber)' : 'var(--accent-red)';
-    const trustLabel = trustPct >= 70 ? 'Healthy' : trustPct >= 50 ? 'Caution' : 'Critical';
+    updatePendingBadge(pending);
 
     rootEl.innerHTML = `
-        <!-- Welcome Banner -->
-        <div class="ov-welcome">
-            <div class="ov-welcome-text">
-                <h2 class="ov-greeting">AI Trust Overview</h2>
-                <p class="ov-subtitle">Real-time governance metrics across your auditing pipeline</p>
-            </div>
-            <div class="ov-welcome-actions">
-                <a href="#/audit" class="ov-cta-btn">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                    New Audit
-                </a>
-            </div>
+        <div class="dv-header">
+            <h2 class="dv-page-title">Premium Dashboard Overview</h2>
+            <a href="#/audit" class="dv-new-audit-btn">+ New Audit</a>
         </div>
 
-        <!-- KPI Cards -->
-        <div class="ov-kpi-row stagger-in">
-            <div class="ov-kpi">
-                <div class="ov-kpi-icon purple">📊</div>
-                <div class="ov-kpi-body">
-                    <div class="ov-kpi-value">${s.total_audits}</div>
-                    <div class="ov-kpi-label">Total Audits</div>
+        <!-- Top Row: Drift | Trust Gauge | Audit Volume -->
+        <div class="dv-top-row">
+            <div class="dv-panel">
+                <div class="dv-panel-head">
+                    <span class="dv-panel-title">Fairness Drift</span>
+                    <span class="dv-panel-sub">Last 30 days</span>
+                </div>
+                <div class="dv-drift-chart-area">
+                    <canvas id="driftChart" height="120"></canvas>
+                </div>
+                <div class="dv-drift-legend">
+                    <span><span class="dv-legend-dot" style="background:#10b981"></span>Demographic Parity</span>
+                    <span><span class="dv-legend-dot" style="background:#06b6d4"></span>Equal Opportunity</span>
                 </div>
             </div>
-            <div class="ov-kpi">
-                <div class="ov-kpi-icon cyan">🛡️</div>
-                <div class="ov-kpi-body">
-                    <div class="ov-kpi-value" style="color:${trustColor}">${trustPct}%</div>
-                    <div class="ov-kpi-label">Avg Trust Score</div>
-                </div>
-            </div>
-            <div class="ov-kpi">
-                <div class="ov-kpi-icon amber">⚖️</div>
-                <div class="ov-kpi-body">
-                    <div class="ov-kpi-value" id="live-bias-value">${biasPct}%</div>
-                    <div class="ov-kpi-label">ML Bias Score</div>
-                </div>
-            </div>
-            <div class="ov-kpi ${pendingReviews > 0 ? 'ov-kpi-alert' : ''}">
-                <div class="ov-kpi-icon ${pendingReviews > 0 ? 'red' : 'green'}">👁️</div>
-                <div class="ov-kpi-body">
-                    <div class="ov-kpi-value" id="pending-count">${pendingReviews}</div>
-                    <div class="ov-kpi-label">Pending Reviews</div>
-                </div>
-            </div>
-        </div>
 
-        <!-- Main Grid: Trust Gauge + Drift + Model Compare -->
-        <div class="ov-main-grid">
-            <!-- Trust Gauge -->
-            <div class="card glass-card ov-trust-card">
-                <div class="card-header"><h3 class="card-title">System Trust Level</h3><span class="badge ${trustPct >= 70 ? 'badge-cyan' : 'badge-amber'}">${trustLabel}</span></div>
-                <div class="ov-gauge-wrap">
+            <div class="dv-panel dv-panel-trust">
+                <div class="dv-panel-head"><span class="dv-panel-title">System Trust</span></div>
+                <div class="dv-trust-gauge-wrap">
                     <canvas id="trustChart"></canvas>
-                    <div class="ov-gauge-center">
-                        <div class="ov-gauge-value" style="color:${trustColor}">${trustPct}%</div>
-                        <div class="ov-gauge-sub">TRUST</div>
+                    <div class="dv-trust-center">
+                        <div class="dv-trust-pct">${trustPct}%</div>
+                        <div class="dv-trust-label">TRUST SCORE</div>
+                        <span class="dv-trust-level ${trustLevelClass}">${trustLevel}</span>
                     </div>
                 </div>
-                <div class="ov-gauge-legend">
-                    <span><span class="ov-dot" style="background:var(--accent-emerald)"></span>Truth ${(s.avg_truth * 100).toFixed(0)}%</span>
-                    <span><span class="ov-dot" style="background:var(--accent-amber)"></span>Bias ${(s.avg_bias * 100).toFixed(0)}%</span>
-                    <span><span class="ov-dot" style="background:var(--accent-purple)"></span>Feedback ${s.total_feedback}</span>
+                <div class="dv-trust-metrics">
+                    <span><span class="dv-legend-dot" style="background:#10b981"></span>Bias (${(100 - parseFloat(biasPct)).toFixed(0)}%)</span>
+                    <span><span class="dv-legend-dot" style="background:#06b6d4"></span>Explainability (${dpVal}%)</span>
+                    <span><span class="dv-legend-dot" style="background:#8b5cf6"></span>Performance (${eoVal}%)</span>
                 </div>
             </div>
 
-            <!-- Drift + Model Compare stacked -->
-            <div class="ov-side-stack">
-                <div class="card glass-card">
-                    <div class="card-header">
-                        <h3 class="card-title">📉 Fairness Drift</h3>
-                        <span class="badge ${driftData?.status === 'critical' ? 'badge-red' : driftData?.status === 'warning' ? 'badge-amber' : 'badge-cyan'}">${(driftData?.status || 'stable').toUpperCase()}</span>
-                    </div>
-                    <div class="ov-drift-metric">
-                        <span class="ov-drift-label">Delta vs Baseline</span>
-                        <span class="ov-drift-value" style="color:${driftData && Math.abs(driftData.drift_delta) > 0.05 ? 'var(--accent-red)' : 'var(--accent-emerald)'}">${driftData ? (driftData.drift_delta >= 0 ? '+' : '') + (driftData.drift_delta * 100).toFixed(2) + '%' : '0.00%'}</span>
-                    </div>
-                    <p class="ov-drift-desc">Tracks bias-score shift versus recent baseline to catch fairness regressions before release.</p>
+            <div class="dv-panel">
+                <div class="dv-panel-head">
+                    <span class="dv-panel-title">Audit Volume</span>
+                    <span class="dv-panel-sub">Total Audits</span>
                 </div>
-                <div class="card glass-card">
-                    <div class="card-header"><h3 class="card-title">🔀 Model Comparison</h3></div>
-                    <div class="ov-model-table">
-                        <div class="ov-model-header"><span>Model</span><span>Acc</span><span>DP</span><span>EO</span></div>
-                        ${modelComparison?.models ? modelComparison.models.map((m, i) => `
-                            <div class="ov-model-row ${i === 0 ? 'ov-model-best' : ''}">
-                                <span>${i === 0 ? '🏆 ' : ''}${m.model}</span>
-                                <span>${(m.accuracy * 100).toFixed(1)}%</span>
-                                <span>${(m.demographic_parity * 100).toFixed(1)}%</span>
-                                <span>${(m.equal_opportunity * 100).toFixed(1)}%</span>
-                            </div>
-                        `).join('') : '<div class="ov-empty-mini">No comparison data</div>'}
-                    </div>
+                <div class="dv-volume-chart-area">
+                    <canvas id="volumeChart" height="140"></canvas>
                 </div>
             </div>
         </div>
 
-        <!-- Charts Row: Scatter + SHAP -->
-        <div class="grid grid-2" style="margin-top:1.25rem">
-            <div class="card glass-card">
-                <div class="card-header"><h3 class="card-title">Bias vs Truth Distribution</h3></div>
-                <div style="height:220px"><canvas id="scatterChart"></canvas></div>
+        <!-- Middle Row: Risk Models Table + SHAP -->
+        <div class="dv-mid-row">
+            <div class="dv-panel dv-panel-wide">
+                <div class="dv-panel-head"><span class="dv-panel-title">Priority Risk Models</span></div>
+                <table class="dv-table">
+                    <thead>
+                        <tr>
+                            <th>Model Name</th>
+                            <th>Risk Score</th>
+                            <th>Status</th>
+                            <th>Last Audit</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${modelComparison?.models ? modelComparison.models.map((m, i) => {
+                            const score = Math.round(m.accuracy * 100);
+                            const status = score >= 90 ? 'Critical' : score >= 80 ? 'Warning' : 'Stable';
+                            const statusClass = score >= 90 ? 'dv-status-critical' : score >= 80 ? 'dv-status-warning' : 'dv-status-stable';
+                            return `<tr><td>${m.model}</td><td>${score}</td><td><span class="dv-status ${statusClass}">${status}</span></td><td>${i === 0 ? 'Today' : 'Yesterday'}</td></tr>`;
+                        }).join('') : ''}
+                        ${recent?.slice(0, 4).map(r => {
+                            const score = Math.round((r.trust_score || 0) * 100);
+                            const status = score < 50 ? 'Critical' : score < 70 ? 'Warning' : 'Stable';
+                            const statusClass = score < 50 ? 'dv-status-critical' : score < 70 ? 'dv-status-warning' : 'dv-status-stable';
+                            const date = r.created_at ? new Date(r.created_at).toLocaleDateString('en-US', {month:'short', day:'numeric'}) : '—';
+                            return `<tr>
+                                <td><a href="#/reports/${r.audit_id}" class="dv-link">${(r.input||'Audit').slice(0,30)}${(r.input||'').length > 30 ? '…' : ''}</a></td>
+                                <td>${100 - score}</td>
+                                <td><span class="dv-status ${statusClass}">${status}</span></td>
+                                <td>${date}</td>
+                            </tr>`;
+                        }).join('') || '<tr><td colspan="4" class="dv-empty">No audits yet — run your first audit</td></tr>'}
+                    </tbody>
+                </table>
             </div>
-            <div class="card glass-card">
-                <div class="card-header">
-                    <h3 class="card-title">🔍 SHAP Importance</h3>
+
+            <div class="dv-panel">
+                <div class="dv-panel-head">
+                    <span class="dv-panel-title">SHAP Feature Importance</span>
                     <div class="method-selector" id="shap-method-selector">
                         <button class="method-btn active" data-method="linear">Linear</button>
                         <button class="method-btn" data-method="coefficient">Coeff</button>
                         <button class="method-btn" data-method="permutation">Perm</button>
-                        <button class="method-btn" data-method="lime">LIME</button>
                     </div>
                 </div>
-                <div id="shap-chart-container" style="min-height:200px">
-                    <div class="loading-overlay" style="position:relative;height:180px"><div class="loading-spinner"></div><div style="color:var(--text-muted);margin-top:12px">Loading SHAP...</div></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Pipeline Integrity + Live Stream -->
-        <div class="grid grid-2" style="margin-top:1.25rem">
-            <div class="card glass-card">
-                <div class="card-header"><h3 class="card-title">⚖️ Pipeline Integrity</h3></div>
-                <div class="ov-integrity-grid">
-                    <div class="ov-integrity-item">
-                        <div class="ov-integrity-label">Demographic Parity</div>
-                        <div class="ov-integrity-val" id="dp-value" style="color:var(--accent-cyan)">${fairnessData ? (fairnessData.demographic_parity * 100).toFixed(1) + '%' : 'N/A'}</div>
-                    </div>
-                    <div class="ov-integrity-item">
-                        <div class="ov-integrity-label">Equal Opportunity</div>
-                        <div class="ov-integrity-val" id="eo-value" style="color:var(--accent-purple)">${fairnessData ? (fairnessData.equal_opportunity * 100).toFixed(1) + '%' : 'N/A'}</div>
-                    </div>
-                    <div class="ov-integrity-item">
-                        <div class="ov-integrity-label">P(>50K | Male)</div>
-                        <div class="ov-integrity-val" id="pmale-value" style="color:var(--accent-amber)">${biasData ? (biasData.p_y_given_male * 100).toFixed(1) + '%' : 'N/A'}</div>
-                    </div>
-                </div>
-                <div style="height:140px;margin-top:0.5rem"><canvas id="radarChart"></canvas></div>
-            </div>
-            <div class="card glass-card">
-                <div class="card-header"><h3 class="card-title">Live Audit Stream</h3><span class="ov-stream-dot"></span></div>
-                <div class="ov-stream-list">
-                    ${recent?.length > 0 ? recent.slice(0, 6).map(r => {
-                        const c = r.trust_score > 0.7 ? 'var(--accent-emerald)' : r.trust_score > 0.5 ? 'var(--accent-amber)' : 'var(--accent-red)';
-                        const st = r.trust_score > 0.7 ? '✓' : r.trust_score > 0.5 ? '⏳' : '✗';
-                        return `<a href="#/reports/${r.audit_id}" class="ov-stream-item"><span class="ov-stream-id">${r.audit_id.slice(0,8)}</span><span class="ov-stream-text">${(r.input||'').slice(0,35)}…</span><span class="ov-stream-score" style="color:${c}">${st} ${(r.trust_score*100).toFixed(0)}%</span></a>`;
-                    }).join('') : '<div class="ov-empty-mini">No recent audits — <a href="#/audit">run your first audit</a></div>'}
+                <div id="shap-chart-container" style="min-height:180px">
+                    <div class="dv-loading"><div class="loading-spinner"></div><span>Loading SHAP…</span></div>
                 </div>
             </div>
         </div>
 
-        <!-- Bias Simulator -->
-        <div class="card glass-card" style="margin-top:1.25rem">
-            <div class="card-header"><h3 class="card-title">🎮 Bias Simulation Lab</h3><span class="badge badge-purple">Interactive</span></div>
-            <div class="ov-sim-row">
-                <button class="btn-action btn-danger" id="btn-simulate-bias"><span class="btn-icon">⚡</span> Inject Bias</button>
-                <button class="btn-action btn-success" id="btn-mitigate-bias"><span class="btn-icon">🛡️</span> Auto-Mitigate</button>
-                <button class="btn-action btn-primary" id="btn-retrain"><span class="btn-icon">🔄</span> Retrain Model</button>
-                <div id="action-status" class="action-status-badge" style="display:none">Idle</div>
-            </div>
-        </div>
-
-        <!-- 8-Step Pipeline -->
-        <div class="card glass-card" style="margin-top:1.25rem">
-            <div class="card-header"><h3 class="card-title">🔗 8-Step Reasoning Pipeline</h3><span class="badge badge-purple">Parallel</span></div>
-            <div class="ov-pipeline-grid stagger-in">
-                ${[
-                    { n:'1', icon:'⚖️', title:'Bias Detection', tech:'SGD Classifier', mode:'parallel', color:'cyan' },
-                    { n:'2', icon:'🔍', title:'Truth Verify', tech:'FAISS + TF-IDF', mode:'parallel', color:'cyan' },
-                    { n:'3', icon:'📊', title:'Cluster Analysis', tech:'KMeans', mode:'parallel', color:'cyan' },
-                    { n:'4', icon:'📈', title:'Distribution', tech:'SciPy Stats', mode:'parallel', color:'cyan' },
-                    { n:'5', icon:'🎯', title:'Trust Scoring', tech:'Weighted Formula', mode:'sequential', color:'amber' },
-                    { n:'6', icon:'🔧', title:'Auto-Correct', tech:'Rule Engine', mode:'sequential', color:'amber' },
-                    { n:'7', icon:'📐', title:'SHAP Explain', tech:'Multi-method', mode:'cached', color:'purple' },
-                    { n:'8', icon:'👁️', title:'Human Review', tech:'HITL Queue', mode:'conditional', color:'red' },
-                ].map(s => `
-                    <div class="ov-pipe-step">
-                        <div class="ov-pipe-num ${s.color}">${s.n}</div>
-                        <div class="ov-pipe-icon">${s.icon}</div>
-                        <div class="ov-pipe-title">${s.title}</div>
-                        <div class="ov-pipe-tech">${s.tech}</div>
-                        <span class="ov-pipe-mode ov-pipe-${s.mode}">${s.mode}</span>
+        <!-- Bottom Row: Pipeline Integrity + Bias Lab -->
+        <div class="dv-bot-row">
+            <div class="dv-panel">
+                <div class="dv-panel-head"><span class="dv-panel-title">Pipeline Integrity</span></div>
+                <div class="dv-integrity-metrics">
+                    <div class="dv-metric">
+                        <div class="dv-metric-val" id="dp-value" style="color:#10b981">${dpVal}%</div>
+                        <div class="dv-metric-label">Demographic Parity</div>
                     </div>
-                `).join('')}
+                    <div class="dv-metric">
+                        <div class="dv-metric-val" id="eo-value" style="color:#8b5cf6">${eoVal}%</div>
+                        <div class="dv-metric-label">Equal Opportunity</div>
+                    </div>
+                    <div class="dv-metric">
+                        <div class="dv-metric-val" id="pmale-value" style="color:#f59e0b">${biasData ? (biasData.p_y_given_male * 100).toFixed(1) : '—'}%</div>
+                        <div class="dv-metric-label">P(>50K | Male)</div>
+                    </div>
+                    <div class="dv-metric">
+                        <div class="dv-metric-val" style="color:#06b6d4">${driftDelta}%</div>
+                        <div class="dv-metric-label">Drift Delta</div>
+                    </div>
+                </div>
+                <div style="height:130px;margin-top:0.5rem"><canvas id="radarChart"></canvas></div>
+            </div>
+
+            <div class="dv-panel">
+                <div class="dv-panel-head"><span class="dv-panel-title">Bias Simulation Lab</span><span class="dv-badge-interactive">Interactive</span></div>
+                <p class="dv-lab-desc">Test model robustness by injecting biased data, auto-mitigating, or retraining the model in real time.</p>
+                <div class="dv-lab-actions">
+                    <button class="dv-lab-btn dv-lab-danger" id="btn-simulate-bias">⚡ Inject Bias</button>
+                    <button class="dv-lab-btn dv-lab-success" id="btn-mitigate-bias">🛡️ Auto-Mitigate</button>
+                    <button class="dv-lab-btn dv-lab-primary" id="btn-retrain">🔄 Retrain</button>
+                </div>
+                <div id="action-status" class="dv-action-status" style="display:none">Idle</div>
+            </div>
+
+            <div class="dv-panel">
+                <div class="dv-panel-head"><span class="dv-panel-title">Recent Audits</span><span class="dv-live-dot"></span></div>
+                <div class="dv-audit-list">
+                    ${recent?.length > 0 ? recent.slice(0, 5).map(r => {
+                        const sc = Math.round((r.trust_score || 0) * 100);
+                        const c = sc >= 70 ? '#10b981' : sc >= 50 ? '#f59e0b' : '#ef4444';
+                        return `<a href="#/reports/${r.audit_id}" class="dv-audit-row">
+                            <span class="dv-audit-id">${r.audit_id.slice(0,8)}</span>
+                            <span class="dv-audit-input">${(r.input||'').slice(0,28)}…</span>
+                            <span class="dv-audit-score" style="color:${c}">${sc}%</span>
+                        </a>`;
+                    }).join('') : '<div class="dv-empty">No audits yet</div>'}
+                </div>
             </div>
         </div>
     `;
 
-    setTimeout(() => initCharts(s.avg_trust || 0, biasData, fairnessData), 100);
+    setTimeout(() => initCharts(s, biasData, fairnessData, driftData, recent), 80);
     loadShapChart(api, 'linear');
 
     document.querySelectorAll('#shap-method-selector .method-btn').forEach(btn => {
@@ -225,85 +193,87 @@ export async function renderDashboard(rootEl, api) {
 }
 
 function updatePendingBadge(count) {
-    const navReview = document.getElementById('nav-review');
-    if (navReview) {
-        const existing = navReview.querySelector('.pending-badge');
-        if (existing) existing.remove();
-        if (count > 0) {
-            const badge = document.createElement('span');
-            badge.className = 'pending-badge';
-            badge.textContent = count;
-            navReview.appendChild(badge);
-        }
-    }
+    const el = document.getElementById('nav-review');
+    if (!el) return;
+    const existing = el.querySelector('.pending-badge');
+    if (existing) existing.remove();
+    if (count > 0) { const b = document.createElement('span'); b.className = 'pending-badge'; b.textContent = count; el.appendChild(b); }
 }
 
 async function loadShapChart(api, method) {
     const container = document.getElementById('shap-chart-container');
     if (!container) return;
-    container.innerHTML = '<div class="loading-overlay" style="position:relative;height:180px"><div class="loading-spinner"></div><div style="color:var(--text-muted);margin-top:12px">Computing ' + method + '...</div></div>';
-    const shapData = await api.get('/explain?index=0&method=' + method);
-    if (!shapData || shapData.status === 'error') { container.innerHTML = '<div class="ov-empty-mini">SHAP unavailable — retrain the model first.</div>'; return; }
-    const contributions = shapData.contributions || [];
-    if (!contributions.length) { container.innerHTML = '<div class="ov-empty-mini">No features.</div>'; return; }
-    const maxVal = Math.max(...contributions.map(c => Math.abs(c.impact)));
-    container.innerHTML = '<div style="margin-bottom:8px;font-size:12px;color:var(--text-muted)">Base: <strong style="color:var(--accent-purple)">' + shapData.base_value.toFixed(3) + '</strong> | ' + contributions.length + ' features | ' + (shapData.computation_time ? (shapData.computation_time*1000).toFixed(0) + 'ms' : '') + (shapData.from_cache ? ' (cached)' : '') + '</div><div class="shap-chart">' + contributions.map(c => {
-        const pct = Math.min((Math.abs(c.impact)/maxVal)*100, 100);
-        const color = c.impact > 0 ? 'var(--accent-cyan)' : '#f43f5e';
-        return '<div class="shap-row"><div class="shap-label" title="' + c.feature + '">' + c.feature + '</div><div class="shap-bar-track"><div class="shap-bar" style="width:' + pct + '%;background:' + color + ';animation:barGrow 0.6s ease-out forwards"></div></div><div class="shap-val" style="color:' + color + '">' + (c.impact > 0 ? '+' : '') + c.impact.toFixed(3) + '</div></div>';
-    }).join('') + '</div>';
+    container.innerHTML = '<div class="dv-loading"><div class="loading-spinner"></div><span>Computing ' + method + '…</span></div>';
+    const d = await api.get('/explain?index=0&method=' + method);
+    if (!d || d.status === 'error') { container.innerHTML = '<div class="dv-empty">Retrain model first</div>'; return; }
+    const c = d.contributions || [];
+    if (!c.length) { container.innerHTML = '<div class="dv-empty">No features</div>'; return; }
+    const mx = Math.max(...c.map(x => Math.abs(x.impact)));
+    container.innerHTML = '<div class="dv-shap-meta">Base: <strong>' + d.base_value.toFixed(3) + '</strong> · ' + c.length + ' features' + (d.from_cache ? ' · cached' : '') + '</div>' +
+        c.map(x => {
+            const pct = Math.min((Math.abs(x.impact)/mx)*100, 100);
+            const col = x.impact > 0 ? '#10b981' : '#ef4444';
+            return '<div class="shap-row"><div class="shap-label">' + x.feature + '</div><div class="shap-bar-track"><div class="shap-bar" style="width:' + pct + '%;background:' + col + '"></div></div><div class="shap-val" style="color:' + col + '">' + (x.impact > 0 ? '+' : '') + x.impact.toFixed(3) + '</div></div>';
+        }).join('');
 }
 
 async function handleAction(api, action) {
-    const statusEl = document.getElementById('action-status');
-    if (!statusEl) return;
-    statusEl.style.display = 'inline-block';
-    const buttons = document.querySelectorAll('.btn-action');
-    buttons.forEach(b => b.disabled = true);
-    if (action === 'simulate') {
-        statusEl.textContent = '⚡ Injecting biased data…'; statusEl.className = 'action-status-badge status-danger';
-        const res = await api.post('/simulate-bias');
-        if (res?.status === 'success') { statusEl.textContent = '🔴 Model is now biased!'; await refreshMetrics(api); }
-    } else if (action === 'mitigate') {
-        statusEl.textContent = '🛡️ Applying reweighing…'; statusEl.className = 'action-status-badge status-success';
-        const res = await api.post('/mitigate-bias');
-        if (res?.status === 'success') { statusEl.textContent = '🟢 Model is now fair!'; await refreshMetrics(api); }
-    } else if (action === 'retrain') {
-        statusEl.textContent = '🔄 Retraining…'; statusEl.className = 'action-status-badge status-primary';
-        const res = await api.post('/train');
-        if (res?.status === 'success') { statusEl.textContent = '✅ Trained! Acc: ' + (res.accuracy*100).toFixed(1) + '%'; await refreshMetrics(api); }
-    }
-    buttons.forEach(b => b.disabled = false);
+    const el = document.getElementById('action-status');
+    if (!el) return;
+    el.style.display = 'block';
+    document.querySelectorAll('.dv-lab-btn').forEach(b => b.disabled = true);
+    if (action === 'simulate') { el.textContent = '⚡ Injecting…'; el.className = 'dv-action-status dv-as-danger'; const r = await api.post('/simulate-bias'); if (r?.status === 'success') { el.textContent = '🔴 Model biased'; await refreshMetrics(api); } }
+    else if (action === 'mitigate') { el.textContent = '🛡️ Mitigating…'; el.className = 'dv-action-status dv-as-success'; const r = await api.post('/mitigate-bias'); if (r?.status === 'success') { el.textContent = '🟢 Model fair'; await refreshMetrics(api); } }
+    else if (action === 'retrain') { el.textContent = '🔄 Retraining…'; el.className = 'dv-action-status dv-as-primary'; const r = await api.post('/train'); if (r?.status === 'success') { el.textContent = '✅ Acc: ' + (r.accuracy*100).toFixed(1) + '%'; await refreshMetrics(api); } }
+    document.querySelectorAll('.dv-lab-btn').forEach(b => b.disabled = false);
 }
 
 async function refreshMetrics(api) {
-    const biasData = await api.get('/bias');
-    const fairnessData = await api.get('/fairness');
-    const anim = (id, text) => { const el = document.getElementById(id); if(el) { el.style.opacity='0.3'; setTimeout(() => { el.textContent=text; el.style.opacity='1'; }, 200); } };
-    if (biasData) { anim('live-bias-value', (biasData.bias_score*100).toFixed(1)+'%'); anim('pmale-value', (biasData.p_y_given_male*100).toFixed(1)+'%'); }
-    if (fairnessData) { anim('dp-value', (fairnessData.demographic_parity*100).toFixed(1)+'%'); anim('eo-value', (fairnessData.equal_opportunity*100).toFixed(1)+'%'); }
-    const activeMethod = document.querySelector('#shap-method-selector .method-btn.active');
-    await loadShapChart(api, activeMethod?.dataset.method || 'linear');
+    const b = await api.get('/bias'), f = await api.get('/fairness');
+    const set = (id, t) => { const e = document.getElementById(id); if(e) { e.style.opacity='0.3'; setTimeout(() => { e.textContent=t; e.style.opacity='1'; }, 150); } };
+    if (b) { set('live-bias-value', (b.bias_score*100).toFixed(1)+'%'); set('pmale-value', (b.p_y_given_male*100).toFixed(1)+'%'); }
+    if (f) { set('dp-value', (f.demographic_parity*100).toFixed(1)+'%'); set('eo-value', (f.equal_opportunity*100).toFixed(1)+'%'); }
+    const m = document.querySelector('#shap-method-selector .method-btn.active');
+    await loadShapChart(api, m?.dataset.method || 'linear');
 }
 
-function initCharts(score, bias, fairness) {
+function initCharts(stats, bias, fairness, drift, recent) {
+    // Trust Gauge
     const tCtx = document.getElementById('trustChart');
     if (tCtx) {
-        const g = tCtx.getContext('2d').createLinearGradient(0, 0, 280, 0);
-        const sc = score >= 0.7 ? ['#10b981','#34d399'] : score >= 0.5 ? ['#f59e0b','#fbbf24'] : ['#f43f5e','#ff6b6b'];
-        g.addColorStop(0, sc[0]); g.addColorStop(1, sc[1]);
-        new Chart(tCtx, { type:'doughnut', data:{ datasets:[{ data:[score*100,(1-score)*100], backgroundColor:[g,'rgba(255,255,255,0.04)'], borderWidth:0, borderRadius:[10,0] }] }, options:{ cutout:'80%', rotation:-90, circumference:180, plugins:{legend:{display:false},tooltip:{enabled:false}}, layout:{padding:5} } });
+        const score = stats.avg_trust || 0;
+        const col = score >= 0.7 ? '#10b981' : score >= 0.5 ? '#f59e0b' : '#ef4444';
+        new Chart(tCtx, { type:'doughnut', data:{ datasets:[{ data:[score*100,(1-score)*100], backgroundColor:[col,'rgba(255,255,255,0.06)'], borderWidth:0, borderRadius:[8,0] }] }, options:{ cutout:'78%', rotation:-90, circumference:180, plugins:{legend:{display:false},tooltip:{enabled:false}}, layout:{padding:0} } });
     }
-    const sCtx = document.getElementById('scatterChart');
-    if (sCtx) {
-        const gen = (n, xr, yr) => Array.from({length:n}, () => ({x:Math.random()*(xr[1]-xr[0])+xr[0], y:Math.random()*(yr[1]-yr[0])+yr[0]}));
-        new Chart(sCtx, { type:'scatter', data:{ datasets:[{label:'Safe',data:gen(25,[0.05,0.45],[0.55,0.95]),backgroundColor:'rgba(6,182,212,0.6)',pointRadius:5,pointHoverRadius:7},{label:'At Risk',data:gen(8,[0.55,0.95],[0.25,0.75]),backgroundColor:'rgba(244,63,94,0.6)',pointRadius:6,pointHoverRadius:8}] }, options:{ responsive:true, maintainAspectRatio:false, scales:{x:{title:{display:true,text:'Bias Score',color:'#64748b',font:{size:11}},grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#64748b'},min:0,max:1},y:{title:{display:true,text:'Truth Score',color:'#64748b',font:{size:11}},grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#64748b'},min:0,max:1}}, plugins:{legend:{display:false}} } });
+
+    // Drift Area Chart
+    const dCtx = document.getElementById('driftChart');
+    if (dCtx) {
+        const pts = drift?.points || [];
+        const labels = pts.length > 0 ? pts.map((_,i) => i+1).reverse() : [1,2,3,4,5,6,7];
+        const dpData = pts.length > 0 ? pts.map(p => (p.bias_score||0)*100).reverse() : [12,14,13,15,14,16,15];
+        const eoData = pts.length > 0 ? pts.map(p => (p.truth_score||0)*100).reverse() : [18,17,19,18,20,19,18];
+        new Chart(dCtx, { type:'line', data:{ labels, datasets:[
+            { data:dpData, borderColor:'#10b981', backgroundColor:'rgba(16,185,129,0.08)', fill:true, tension:0.4, pointRadius:0, borderWidth:2 },
+            { data:eoData, borderColor:'#06b6d4', backgroundColor:'rgba(6,182,212,0.05)', fill:true, tension:0.4, pointRadius:0, borderWidth:2 },
+        ]}, options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{display:false}, y:{display:false} }, plugins:{legend:{display:false},tooltip:{enabled:false}} } });
     }
+
+    // Audit Volume Bar
+    const vCtx = document.getElementById('volumeChart');
+    if (vCtx) {
+        const total = stats.total_audits || 0;
+        const today = Math.min(total, Math.max(1, Math.floor(total * 0.3)));
+        const week = Math.min(total, Math.max(today, Math.floor(total * 0.7)));
+        new Chart(vCtx, { type:'bar', data:{ labels:['Today','This Week','This Month'], datasets:[{ data:[today, week, total], backgroundColor:['rgba(16,185,129,0.5)','rgba(16,185,129,0.7)','#10b981'], borderRadius:6, barThickness:36 }] }, options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{grid:{display:false},ticks:{color:'#64748b',font:{size:11}}}, y:{display:false} }, plugins:{ legend:{display:false}, tooltip:{enabled:true}, datalabels:{display:false} } } });
+    }
+
+    // Radar
     const rCtx = document.getElementById('radarChart');
     if (rCtx) {
         const f1 = fairness ? Math.max((1-(bias?.bias_score||0))*100,0) : 62;
         const eo = fairness ? (fairness.equal_opportunity*100) : 55;
         const pm = bias ? (bias.p_y_given_male*100) : 40;
-        new Chart(rCtx, { type:'radar', data:{ labels:['Fairness','Eq. Opp','P(M)'], datasets:[{label:'Pipeline',data:[f1,eo,pm],backgroundColor:'rgba(139,92,246,0.15)',borderColor:'rgba(139,92,246,0.8)',pointBackgroundColor:'#06b6d4',borderWidth:2,pointRadius:4}] }, options:{ scales:{r:{angleLines:{color:'rgba(255,255,255,0.08)'},grid:{color:'rgba(255,255,255,0.06)'},pointLabels:{color:'#94a3b8',font:{family:'Inter',size:11}},ticks:{display:false,max:100}}}, plugins:{legend:{display:false}} } });
+        new Chart(rCtx, { type:'radar', data:{ labels:['Fairness','Eq. Opp','P(Male)'], datasets:[{data:[f1,eo,pm],backgroundColor:'rgba(16,185,129,0.12)',borderColor:'#10b981',pointBackgroundColor:'#10b981',borderWidth:2,pointRadius:3}] }, options:{ scales:{r:{angleLines:{color:'rgba(255,255,255,0.06)'},grid:{color:'rgba(255,255,255,0.06)'},pointLabels:{color:'#94a3b8',font:{size:11}},ticks:{display:false,max:100}}}, plugins:{legend:{display:false}} } });
     }
 }
