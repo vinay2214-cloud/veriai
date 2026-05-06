@@ -1,3 +1,5 @@
+import { escapeHtml } from '../utils.js';
+
 export async function renderReviewPage(rootEl, api) {
     const queue = await api.get('/review/queue');
     const items = queue || [];
@@ -14,7 +16,7 @@ export async function renderReviewPage(rootEl, api) {
             <div class="stat-card green"><div class="stat-label">Avg Trust</div><div class="stat-value green">${items.length > 0 ? (items.reduce((s,i) => s + (i.trust_score||0), 0) / items.length * 100).toFixed(0) + '%' : 'N/A'}</div></div>
         </div>
 
-        <div class="grid" style="grid-template-columns:300px 1fr; gap:2rem; align-items:start;">
+        <div class="review-layout">
             <!-- Queue List -->
             <div class="card glass-card" style="padding:1.25rem 1rem;">
                 <h3 class="card-title" style="margin-left:0.5rem; margin-bottom:0.75rem;">Flagged Items</h3>
@@ -26,10 +28,10 @@ export async function renderReviewPage(rootEl, api) {
                         const statusIcon = item.status === 'approved' ? '✅' : item.status === 'rejected' ? '❌' : item.status === 'escalated' ? '🚨' : '⏳';
                         return '<div class="queue-item" data-index="' + i + '" style="' + active + ' border-radius:var(--radius-md); padding:0.75rem; cursor:pointer; transition:all 0.2s;">' +
                             '<div style="display:flex; justify-content:space-between; align-items:center;">' +
-                                '<div style="font-weight:600; font-size:0.82rem;">' + statusIcon + ' #' + item.audit_id.substring(0,8) + '</div>' +
+                            '<div style="font-weight:600; font-size:0.82rem;">' + statusIcon + ' #' + escapeHtml(String(item.audit_id || '').substring(0,8)) + '</div>' +
                                 '<div style="background:' + sevColor + '; color:white; font-size:0.65rem; font-weight:600; padding:2px 8px; border-radius:4px;">' + severity + '</div>' +
                             '</div>' +
-                            '<div style="font-size:0.7rem; color:var(--text-muted); margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + (item.input_preview || '').substring(0, 45) + '...</div>' +
+                            '<div style="font-size:0.7rem; color:var(--text-muted); margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml((item.input_preview || '').substring(0, 45)) + '...</div>' +
                             '<div style="font-size:0.68rem; color:' + sevColor + '; margin-top:2px;">Trust: ' + (item.trust_score * 100).toFixed(0) + '%</div>' +
                         '</div>';
                     }).join('') : '<div style="color:var(--text-muted); text-align:center; padding:2rem;">✅ No items pending review</div>'}
@@ -67,6 +69,11 @@ function buildDetailPanel(item) {
     const statusText = item.status === 'approved' ? '✅ Approved' : (item.status === 'rejected' ? '❌ Rejected' : (item.status === 'escalated' ? '🚨 Escalated' : '⏳ Pending'));
     const statusColor = item.status === 'approved' ? 'var(--accent-emerald)' : (item.status === 'rejected' ? 'var(--accent-red)' : (item.status === 'escalated' ? 'var(--accent-amber)' : 'var(--accent-blue)'));
     const isActioned = item.status !== 'pending';
+    const auditId = escapeHtml(item.audit_id || '');
+    const createdAt = escapeHtml(item.created_at || '');
+    const inputPreview = escapeHtml(item.input_preview || 'No input data');
+    const correctedOutput = item.corrected_output ? escapeHtml(item.corrected_output) : '';
+    const reviewerNotes = escapeHtml(item.reviewer_notes || '');
 
     // Determine risk factors
     const risks = [];
@@ -80,8 +87,8 @@ function buildDetailPanel(item) {
         <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1.5rem;">
             <div>
                 <div style="font-size:0.72rem; color:var(--text-muted); margin-bottom:0.25rem;">AUDIT ID</div>
-                <h2 style="font-size:1.1rem; font-weight:700; font-family:var(--font-mono);">${item.audit_id}</h2>
-                <div style="font-size:0.72rem; color:var(--text-muted); margin-top:0.25rem;">${item.created_at || ''}</div>
+                <h2 style="font-size:1.1rem; font-weight:700; font-family:var(--font-mono);">${auditId}</h2>
+                <div style="font-size:0.72rem; color:var(--text-muted); margin-top:0.25rem;">${createdAt}</div>
             </div>
             <div style="text-align:right;">
                 <div style="font-size:0.72rem; color:var(--text-muted); margin-bottom:0.25rem;">STATUS</div>
@@ -118,7 +125,7 @@ function buildDetailPanel(item) {
         <div style="margin-bottom:1.25rem;">
             <h4 style="font-size:0.82rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.4rem;">What Was Audited</h4>
             <div style="background:rgba(255,255,255,0.05); padding:0.85rem; border-radius:var(--radius-md); font-size:0.85rem; color:var(--text-primary); border-left:3px solid var(--accent-blue); line-height:1.5;">
-                "${item.input_preview || 'No input data'}"
+                "${inputPreview}"
             </div>
             <div style="font-size:0.68rem; color:var(--text-muted); margin-top:0.3rem; font-style:italic;">
                 This is the AI claim or text that was submitted to VeriAI for trust auditing. The system checked it against the FAISS knowledge base for truth, analyzed it for demographic bias, and produced the scores above.
@@ -130,7 +137,7 @@ function buildDetailPanel(item) {
         <div style="margin-bottom:1.25rem;">
             <h4 style="font-size:0.82rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.4rem;">Auto-Corrected Output</h4>
             <div style="background:rgba(16,185,129,0.05); padding:0.85rem; border-radius:var(--radius-md); font-size:0.85rem; color:var(--text-primary); border-left:3px solid var(--accent-emerald); line-height:1.5;">
-                ${item.corrected_output}
+                ${correctedOutput}
             </div>
             <div style="font-size:0.68rem; color:var(--text-muted); margin-top:0.3rem; font-style:italic;">
                 VeriAI auto-corrected the original AI output using verified knowledge from the FAISS vector store. Review this correction before approving.
@@ -154,14 +161,14 @@ function buildDetailPanel(item) {
         <div id="action-result" style="display:none; padding:0.75rem; border-radius:var(--radius-md); font-size:0.85rem; margin-bottom:1rem;"></div>
         <div>
             <h4 style="font-size:0.82rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.4rem;">Reviewer Notes (RLHF Feedback)</h4>
-            <textarea class="form-textarea" id="review-notes" placeholder="Your feedback improves the model. Describe why you approved, rejected, or escalated this item..." style="min-height:70px; background:rgba(255,255,255,0.02); font-size:0.82rem;">${item.reviewer_notes || ''}</textarea>
+            <textarea class="form-textarea" id="review-notes" placeholder="Your feedback improves the model. Describe why you approved, rejected, or escalated this item..." style="min-height:70px; background:rgba(255,255,255,0.02); font-size:0.82rem;">${reviewerNotes}</textarea>
             <div style="font-size:0.68rem; color:var(--text-muted); margin-top:0.3rem;">Rejection requires notes. Your feedback is used via RLHF to retrain and improve the model's trust scoring.</div>
         </div>
         ` : `
         <div style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:var(--radius-md); padding:1rem;">
             <div style="font-size:0.82rem; color:${statusColor}; font-weight:600; margin-bottom:0.3rem;">${statusText}</div>
             <div style="font-size:0.75rem; color:var(--text-muted);">Reviewed on ${item.reviewed_at || 'unknown date'}</div>
-            ${item.reviewer_notes ? '<div style="font-size:0.78rem; color:var(--text-secondary); margin-top:0.5rem; padding-top:0.5rem; border-top:1px solid rgba(255,255,255,0.06);"><strong>Notes:</strong> ' + item.reviewer_notes + '</div>' : ''}
+            ${item.reviewer_notes ? '<div style="font-size:0.78rem; color:var(--text-secondary); margin-top:0.5rem; padding-top:0.5rem; border-top:1px solid rgba(255,255,255,0.06);"><strong>Notes:</strong> ' + reviewerNotes + '</div>' : ''}
         </div>
         `}
     `;
@@ -199,7 +206,7 @@ function bindReviewActions(api, item, items, idx) {
             const queueEl = document.querySelector('.queue-item[data-index="' + idx + '"]');
             if (queueEl) {
                 const nameEl = queueEl.querySelector('div[style*="font-weight"]');
-                if (nameEl) nameEl.textContent = '✅ #' + item.audit_id.substring(0,8);
+                if (nameEl) nameEl.textContent = '✓ #' + String(item.audit_id || '').substring(0,8);
             }
         } else {
             approve.textContent = '❌ Failed';
@@ -222,7 +229,7 @@ function bindReviewActions(api, item, items, idx) {
             const queueEl = document.querySelector('.queue-item[data-index="' + idx + '"]');
             if (queueEl) {
                 const nameEl = queueEl.querySelector('div[style*="font-weight"]');
-                if (nameEl) nameEl.textContent = '❌ #' + item.audit_id.substring(0,8);
+                if (nameEl) nameEl.textContent = 'Rejected #' + String(item.audit_id || '').substring(0,8);
             }
         } else {
             reject.textContent = '❌ Failed';
@@ -244,7 +251,7 @@ function bindReviewActions(api, item, items, idx) {
             const queueEl = document.querySelector('.queue-item[data-index="' + idx + '"]');
             if (queueEl) {
                 const nameEl = queueEl.querySelector('div[style*="font-weight"]');
-                if (nameEl) nameEl.textContent = '🚨 #' + item.audit_id.substring(0,8);
+                if (nameEl) nameEl.textContent = 'Escalated #' + String(item.audit_id || '').substring(0,8);
             }
         } else {
             escalate.textContent = '🚨 Failed';

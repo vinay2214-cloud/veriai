@@ -1,3 +1,5 @@
+import { escapeHtml } from '../utils.js';
+
 export async function renderSettingsPage(rootEl, api) {
     const config = await api.get('/settings/weights');
     const weights = config?.active_weights || { truth: 0.35, bias: 0.3, confidence: 0.15, cluster: 0.1, distribution: 0.1 };
@@ -5,6 +7,10 @@ export async function renderSettingsPage(rootEl, api) {
 
     // Fetch knowledge base stats
     const kbStats = await api.get('/knowledge-base/stats');
+    const faissConnected = kbStats?.faiss_status === 'connected';
+    const faissLabel = faissConnected
+        ? 'Connected'
+        : (kbStats?.faiss_status === 'empty' ? 'Empty' : 'Degraded');
 
     rootEl.innerHTML = `
         <div style="margin-bottom:1.5rem;">
@@ -15,7 +21,7 @@ export async function renderSettingsPage(rootEl, api) {
             </p>
         </div>
 
-        <div class="grid" style="grid-template-columns:1fr 340px; gap:2rem; align-items:start;">
+        <div class="settings-layout">
             <div>
                 <h3 style="font-size:1rem; font-weight:600; margin-bottom:0.75rem;">Industry Preset Selection</h3>
                 <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:2rem;" id="preset-buttons">
@@ -90,13 +96,17 @@ export async function renderSettingsPage(rootEl, api) {
                     <div style="display:flex; justify-content:space-between; align-items:center; padding:0.5rem 0; border-top:1px solid rgba(255,255,255,0.06);">
                         <div style="font-size:0.72rem; color:var(--text-muted);">FAISS Status:</div>
                         <div style="display:flex; align-items:center; gap:0.3rem;">
-                            <div style="width:6px; height:6px; border-radius:50%; background:${kbStats?.faiss_status === 'connected' ? 'var(--accent-emerald)' : 'var(--accent-red)'}; box-shadow:0 0 6px ${kbStats?.faiss_status === 'connected' ? 'var(--accent-emerald)' : 'var(--accent-red)'};"></div>
-                            <span id="faiss-status" style="font-size:0.72rem; color:${kbStats?.faiss_status === 'connected' ? 'var(--accent-emerald)' : 'var(--accent-red)'};">${kbStats?.faiss_status === 'connected' ? 'Connected' : 'Disconnected'}</span>
+                            <div style="width:6px; height:6px; border-radius:50%; background:${faissConnected ? 'var(--accent-emerald)' : 'var(--accent-amber)'}; box-shadow:0 0 6px ${faissConnected ? 'var(--accent-emerald)' : 'var(--accent-amber)'};"></div>
+                            <span id="faiss-status" style="font-size:0.72rem; color:${faissConnected ? 'var(--accent-emerald)' : 'var(--accent-amber)'};">${faissLabel}</span>
                         </div>
                     </div>
                     <div style="display:flex; justify-content:space-between; align-items:center; padding:0.3rem 0;">
                         <div style="font-size:0.72rem; color:var(--text-muted);">Articles Indexed:</div>
                         <span id="kb-count" style="font-size:0.72rem; color:var(--accent-cyan); font-weight:600;">${kbStats?.total_articles || 0}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:0.3rem 0;">
+                        <div style="font-size:0.72rem; color:var(--text-muted);">Vector Mode:</div>
+                        <span style="font-size:0.72rem; color:var(--text-secondary); font-family:var(--font-mono);">${escapeHtml(kbStats?.vectorizer || 'local_tfidf')}</span>
                     </div>
 
                     <!-- Upload result area -->
@@ -124,7 +134,7 @@ export async function renderSettingsPage(rootEl, api) {
         if (!file) return;
 
         btnUploadCsv.disabled = true;
-        btnUploadCsv.textContent = '⏳ Uploading ' + file.name + '...';
+        btnUploadCsv.textContent = 'Uploading ' + file.name + '...';
 
         const formData = new FormData();
         formData.append('file', file);
@@ -140,11 +150,11 @@ export async function renderSettingsPage(rootEl, api) {
                 resultEl.style.border = '1px solid rgba(16,185,129,0.3)';
                 resultEl.style.color = 'var(--accent-emerald)';
                 resultEl.innerHTML = `
-                    <div style="font-weight:600; margin-bottom:0.3rem;">✅ ${data.filename} uploaded successfully!</div>
+                    <div style="font-weight:600; margin-bottom:0.3rem;">${escapeHtml(data.filename)} uploaded successfully.</div>
                     <div style="color:var(--text-secondary);">
                         <strong>${data.rows}</strong> rows × <strong>${data.num_features}</strong> features<br/>
-                        Label column: <strong>${data.label_column}</strong><br/>
-                        Columns: ${data.columns.join(', ')}
+                        Label column: <strong>${escapeHtml(data.label_column)}</strong><br/>
+                        Columns: ${escapeHtml(data.columns.join(', '))}
                     </div>
                     <div style="margin-top:0.5rem; font-size:0.72rem; color:var(--text-muted);">
                         Dataset parsed and ready for bias scan. Run an audit to analyze this data.
@@ -156,7 +166,7 @@ export async function renderSettingsPage(rootEl, api) {
                 resultEl.style.background = 'rgba(244,63,94,0.1)';
                 resultEl.style.border = '1px solid rgba(244,63,94,0.3)';
                 resultEl.style.color = 'var(--accent-red)';
-                resultEl.textContent = '❌ ' + ((data && data.error) || 'Upload failed');
+                resultEl.textContent = ((data && data.error) || 'Upload failed');
                 btnUploadCsv.textContent = '📊 Upload CSV Data (Bias Scan)';
             }
         } catch (err) {
@@ -164,7 +174,7 @@ export async function renderSettingsPage(rootEl, api) {
             resultEl.style.background = 'rgba(244,63,94,0.1)';
             resultEl.style.border = '1px solid rgba(244,63,94,0.3)';
             resultEl.style.color = 'var(--accent-red)';
-            resultEl.textContent = '❌ Network error: ' + err.message;
+            resultEl.textContent = 'Network error: ' + err.message;
             btnUploadCsv.textContent = '📊 Upload CSV Data (Bias Scan)';
         }
 
@@ -187,7 +197,7 @@ export async function renderSettingsPage(rootEl, api) {
         if (!file) return;
 
         btnFaiss.disabled = true;
-        btnFaiss.textContent = '⏳ Uploading to FAISS: ' + file.name + '...';
+        btnFaiss.textContent = 'Uploading to FAISS: ' + file.name + '...';
 
         const formData = new FormData();
         formData.append('file', file);
@@ -199,7 +209,7 @@ export async function renderSettingsPage(rootEl, api) {
 
             if (data && data.status === 'success') {
                 // Now rebuild the FAISS index
-                btnFaiss.textContent = '🔧 Rebuilding FAISS index...';
+                btnFaiss.textContent = 'Rebuilding FAISS index...';
                 const rebuildRes = await api.post('/knowledge-base/rebuild');
 
                 resultEl.style.display = 'block';
@@ -207,7 +217,7 @@ export async function renderSettingsPage(rootEl, api) {
                 resultEl.style.border = '1px solid rgba(16,185,129,0.3)';
                 resultEl.style.color = 'var(--accent-emerald)';
                 resultEl.innerHTML = `
-                    <div style="font-weight:600; margin-bottom:0.3rem;">✅ FAISS Vector Store Updated!</div>
+                    <div style="font-weight:600; margin-bottom:0.3rem;">FAISS Vector Store Updated.</div>
                     <div style="color:var(--text-secondary);">
                         <strong>${data.articles_inserted}</strong> new articles inserted<br/>
                         <strong>${data.skipped_duplicates}</strong> duplicates skipped<br/>
@@ -220,14 +230,14 @@ export async function renderSettingsPage(rootEl, api) {
                 document.getElementById('faiss-status').textContent = 'Connected';
                 document.getElementById('faiss-status').style.color = 'var(--accent-emerald)';
                 document.getElementById('kb-count').textContent = data.total_articles;
-                btnFaiss.textContent = '✅ FAISS Connected (' + data.total_articles + ' articles)';
+                btnFaiss.textContent = 'FAISS Connected (' + data.total_articles + ' articles)';
             } else {
                 resultEl.style.display = 'block';
                 resultEl.style.background = 'rgba(244,63,94,0.1)';
                 resultEl.style.border = '1px solid rgba(244,63,94,0.3)';
                 resultEl.style.color = 'var(--accent-red)';
                 resultEl.innerHTML = `
-                    <div style="font-weight:600;">❌ ${(data && data.error) || 'Upload failed'}</div>
+                    <div style="font-weight:600;">${escapeHtml((data && data.error) || 'Upload failed')}</div>
                     <div style="color:var(--text-muted); margin-top:0.3rem; font-size:0.72rem;">
                         CSV format: columns named <strong>title</strong>, <strong>content</strong>, <strong>source</strong> (source is optional).<br/>
                         The <strong>content</strong> column contains the knowledge text for FAISS indexing.
@@ -240,7 +250,7 @@ export async function renderSettingsPage(rootEl, api) {
             resultEl.style.background = 'rgba(244,63,94,0.1)';
             resultEl.style.border = '1px solid rgba(244,63,94,0.3)';
             resultEl.style.color = 'var(--accent-red)';
-            resultEl.textContent = '❌ Network error: ' + err.message;
+            resultEl.textContent = 'Network error: ' + err.message;
             btnFaiss.textContent = '🔗 Connect FAISS Vector Store';
         }
 

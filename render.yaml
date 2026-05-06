@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: veriai
+    runtime: docker
+    # Persistent disks require a paid web-service instance on Render.
+    # Use "starter" for durable SQLite demo storage, or migrate app data to
+    # Render Postgres if you need to stay on a free web service.
+    plan: starter
+    healthCheckPath: /health
+    disk:
+      name: veriai-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: DEMO_MODE
+        value: "true"
+      - key: VERIAI_DB_PATH
+        value: /var/data/veriai.db
+      - key: DATASETS_DIR
+        value: /var/data/datasets
+      - key: VERIAI_LOG_LEVEL
+        value: INFO
+      - key: VERIAI_CORS_ORIGINS
+        value: https://veriai-eyxl.onrender.com,http://localhost:3000,http://127.0.0.1:3000,http://localhost:8000,http://127.0.0.1:8000
+      - key: JWT_SECRET
+        sync: false
+      - key: VERIAI_MASTER_KEY
+        sync: false
+      - key: DB_ENCRYPTION_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false

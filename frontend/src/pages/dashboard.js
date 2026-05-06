@@ -1,3 +1,5 @@
+import { escapeHtml, formatDate } from '../utils.js';
+
 export async function renderDashboard(rootEl, api) {
     const [stats, recent, reviewStats, biasData, fairnessData, driftData, modelComparison] = await Promise.all([
         api.get('/dashboard/stats').catch(() => null),
@@ -27,8 +29,8 @@ export async function renderDashboard(rootEl, api) {
 
     rootEl.innerHTML = `
         <div class="dv-header">
-            <h2 class="dv-page-title">Premium Dashboard Overview</h2>
-            <a href="#/audit" class="dv-new-audit-btn">+ New Audit</a>
+            <h2 class="dv-page-title">Trust Operations Dashboard</h2>
+            <a href="#/audit" class="dv-new-audit-btn">Run Audit</a>
         </div>
 
         <!-- Top Row: Drift | Trust Gauge | Audit Volume -->
@@ -90,18 +92,20 @@ export async function renderDashboard(rootEl, api) {
                     </thead>
                     <tbody>
                         ${mc.models.map((m, i) => {
-                            const score = Math.round(m.accuracy * 100);
-                            const status = score >= 90 ? 'Critical' : score >= 80 ? 'Warning' : 'Stable';
-                            const statusClass = score >= 90 ? 'dv-status-critical' : score >= 80 ? 'dv-status-warning' : 'dv-status-stable';
-                            return `<tr><td>${m.model}</td><td>${score}</td><td><span class="dv-status ${statusClass}">${status}</span></td><td>${i === 0 ? 'Today' : 'Yesterday'}</td></tr>`;
+                            const accuracy = Math.round((m.accuracy || 0) * 100);
+                            const risk = Math.max(0, 100 - accuracy);
+                            const status = risk >= 35 ? 'Critical' : risk >= 20 ? 'Warning' : 'Stable';
+                            const statusClass = risk >= 35 ? 'dv-status-critical' : risk >= 20 ? 'dv-status-warning' : 'dv-status-stable';
+                            return `<tr><td>${escapeHtml(m.model)}</td><td>${risk}</td><td><span class="dv-status ${statusClass}">${status}</span></td><td>${i === 0 ? 'Today' : 'Yesterday'}</td></tr>`;
                         }).join('')}
                         ${recent?.slice(0, 4).map(r => {
                             const score = Math.round((r.trust_score || 0) * 100);
                             const status = score < 50 ? 'Critical' : score < 70 ? 'Warning' : 'Stable';
                             const statusClass = score < 50 ? 'dv-status-critical' : score < 70 ? 'dv-status-warning' : 'dv-status-stable';
-                            const date = r.created_at ? new Date(r.created_at).toLocaleDateString('en-US', {month:'short', day:'numeric'}) : '—';
+                            const date = formatDate(r.created_at);
+                            const input = r.input || 'Audit';
                             return `<tr>
-                                <td><a href="#/reports/${r.audit_id}" class="dv-link">${(r.input||'Audit').slice(0,30)}${(r.input||'').length > 30 ? '…' : ''}</a></td>
+                                <td><a href="#/reports/${encodeURIComponent(r.audit_id)}" class="dv-link">${escapeHtml(input.slice(0,30))}${input.length > 30 ? '…' : ''}</a></td>
                                 <td>${100 - score}</td>
                                 <td><span class="dv-status ${statusClass}">${status}</span></td>
                                 <td>${date}</td>
@@ -169,9 +173,9 @@ export async function renderDashboard(rootEl, api) {
                     ${recent?.length > 0 ? recent.slice(0, 5).map(r => {
                         const sc = Math.round((r.trust_score || 0) * 100);
                         const c = sc >= 70 ? '#10b981' : sc >= 50 ? '#f59e0b' : '#ef4444';
-                        return `<a href="#/reports/${r.audit_id}" class="dv-audit-row">
-                            <span class="dv-audit-id">${r.audit_id.slice(0,8)}</span>
-                            <span class="dv-audit-input">${(r.input||'').slice(0,28)}…</span>
+                        return `<a href="#/reports/${encodeURIComponent(r.audit_id)}" class="dv-audit-row">
+                            <span class="dv-audit-id">${escapeHtml(String(r.audit_id || '').slice(0,8))}</span>
+                            <span class="dv-audit-input">${escapeHtml((r.input||'').slice(0,28))}…</span>
                             <span class="dv-audit-score" style="color:${c}">${sc}%</span>
                         </a>`;
                     }).join('') : '<div class="dv-empty">No audits yet</div>'}
@@ -188,7 +192,7 @@ export async function renderDashboard(rootEl, api) {
             <div class="dv-panel">
                 <div class="dv-panel-head"><span class="dv-panel-title">Critical Issues (Human Review)</span></div>
                 <div style="display:flex;flex-direction:column;gap:0.4rem;max-height:180px;overflow-y:auto">
-                    ${recent?.filter(r => r.trust_score < 0.6).length > 0 ? recent.filter(r => r.trust_score < 0.6).map(r => `<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(239,68,68,0.05);border:1px solid rgba(239,68,68,0.1);border-radius:6px;padding:0.6rem"><div style="font-size:0.8rem"><span style="color:var(--text-muted)">${r.audit_id.slice(0,8)} | </span><span style="color:#ef4444">Low Trust</span> - Requires Review</div><a href="#/review" class="dv-status dv-status-critical" style="text-decoration:none;font-size:0.7rem">Review</a></div>`).join('') : '<div class="dv-empty">No critical issues — all audits above threshold</div>'}
+                    ${recent?.filter(r => r.trust_score < 0.6).length > 0 ? recent.filter(r => r.trust_score < 0.6).map(r => `<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(239,68,68,0.05);border:1px solid rgba(239,68,68,0.1);border-radius:6px;padding:0.6rem"><div style="font-size:0.8rem"><span style="color:var(--text-muted)">${escapeHtml(String(r.audit_id || '').slice(0,8))} | </span><span style="color:#ef4444">Low Trust</span> - Requires Review</div><a href="#/review" class="dv-status dv-status-critical" style="text-decoration:none;font-size:0.7rem">Review</a></div>`).join('') : '<div class="dv-empty">No critical issues — all audits above threshold</div>'}
                 </div>
             </div>
         </div>
@@ -359,4 +363,3 @@ function initCharts(stats, bias, fairness, drift, recent) {
         new Chart(sCtx, { type:'scatter', data:{ datasets:[{label:'Safe',data:gen(25,[0.05,0.45],[0.55,0.95]),backgroundColor:'rgba(16,185,129,0.5)',pointRadius:5,pointHoverRadius:7},{label:'At Risk',data:gen(8,[0.55,0.95],[0.25,0.75]),backgroundColor:'rgba(239,68,68,0.5)',pointRadius:6,pointHoverRadius:8}] }, options:{ responsive:true, maintainAspectRatio:false, scales:{x:{title:{display:true,text:'Bias Score',color:'#64748b',font:{size:11}},grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#64748b'},min:0,max:1},y:{title:{display:true,text:'Truth Score',color:'#64748b',font:{size:11}},grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#64748b'},min:0,max:1}}, plugins:{legend:{display:false}} } });
     }
 }
-

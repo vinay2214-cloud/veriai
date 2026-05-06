@@ -1,0 +1,177 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1050" viewBox="0 0 1600 1050" role="img" aria-labelledby="title desc">
+  <title id="title">VeriAI Application Workflow</title>
+  <desc id="desc">End-to-end workflow for VeriAI, from user input through audit analysis, trust scoring, reporting, and human review.</desc>
+  <defs>
+    <linearGradient id="accent" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#14b8a6"/>
+      <stop offset="0.58" stop-color="#5b8def"/>
+      <stop offset="1" stop-color="#d89a2b"/>
+    </linearGradient>
+    <filter id="shadow" x="-12%" y="-12%" width="124%" height="124%">
+      <feDropShadow dx="0" dy="14" stdDeviation="14" flood-color="#000000" flood-opacity="0.28"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#78909c"/>
+    </marker>
+    <style>
+      .bg { fill: #0b0d0f; }
+      .grid { stroke: rgba(255,255,255,0.05); stroke-width: 1; }
+      .title { fill: #f4f7f8; font: 700 40px Inter, Arial, sans-serif; }
+      .subtitle { fill: #a8b3ba; font: 400 18px Inter, Arial, sans-serif; }
+      .lane-title { fill: #14b8a6; font: 700 16px Inter, Arial, sans-serif; letter-spacing: 1px; }
+      .node { fill: #141b1f; stroke: rgba(255,255,255,0.14); stroke-width: 1.4; filter: url(#shadow); }
+      .node-accent { stroke: url(#accent); stroke-width: 2; }
+      .node-title { fill: #f4f7f8; font: 700 18px Inter, Arial, sans-serif; }
+      .node-text { fill: #a8b3ba; font: 400 14px Inter, Arial, sans-serif; }
+      .mini { fill: #10161a; stroke: rgba(255,255,255,0.13); stroke-width: 1; }
+      .mini-title { fill: #f4f7f8; font: 700 15px Inter, Arial, sans-serif; }
+      .mini-text { fill: #a8b3ba; font: 400 12px Inter, Arial, sans-serif; }
+      .arrow { fill: none; stroke: #78909c; stroke-width: 2.4; marker-end: url(#arrow); }
+      .arrow-soft { fill: none; stroke: #4d6269; stroke-width: 2; marker-end: url(#arrow); stroke-dasharray: 7 7; }
+      .badge { fill: rgba(20,184,166,0.12); stroke: rgba(20,184,166,0.28); }
+      .badge-text { fill: #62d8cc; font: 700 12px Inter, Arial, sans-serif; }
+      .store { fill: #11181c; stroke: rgba(216,154,43,0.45); stroke-width: 1.8; filter: url(#shadow); }
+      .store-title { fill: #f4f7f8; font: 700 17px Inter, Arial, sans-serif; }
+      .store-text { fill: #d5c09a; font: 400 13px Inter, Arial, sans-serif; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1600" height="1050"/>
+  <g opacity="0.65">
+    <path class="grid" d="M0 80H1600M0 160H1600M0 240H1600M0 320H1600M0 400H1600M0 480H1600M0 560H1600M0 640H1600M0 720H1600M0 800H1600M0 880H1600M0 960H1600"/>
+    <path class="grid" d="M80 0V1050M160 0V1050M240 0V1050M320 0V1050M400 0V1050M480 0V1050M560 0V1050M640 0V1050M720 0V1050M800 0V1050M880 0V1050M960 0V1050M1040 0V1050M1120 0V1050M1200 0V1050M1280 0V1050M1360 0V1050M1440 0V1050M1520 0V1050"/>
+  </g>
+
+  <text x="80" y="72" class="title">VeriAI Application Workflow</text>
+  <text x="80" y="104" class="subtitle">AI trust audit flow across UI, FastAPI services, model checks, FAISS retrieval, persistence, reports, and human review.</text>
+
+  <text x="80" y="154" class="lane-title">USER EXPERIENCE</text>
+  <text x="80" y="430" class="lane-title">FASTAPI AUDIT PIPELINE</text>
+  <text x="80" y="744" class="lane-title">DATA, VECTOR STORE, AND GOVERNANCE</text>
+
+  <g transform="translate(80 180)">
+    <rect class="node node-accent" width="260" height="128" rx="8"/>
+    <text x="24" y="38" class="node-title">1. Open VeriAI</text>
+    <text x="24" y="66" class="node-text">Login/demo workspace</text>
+    <text x="24" y="90" class="node-text">Dashboard, audit, reports, settings</text>
+  </g>
+
+  <g transform="translate(430 180)">
+    <rect class="node" width="300" height="128" rx="8"/>
+    <text x="24" y="38" class="node-title">2. Submit Audit Input</text>
+    <text x="24" y="66" class="node-text">Text claim, JSON dataset, CSV upload</text>
+    <text x="24" y="90" class="node-text">or prompt plus LLM output</text>
+  </g>
+
+  <g transform="translate(820 180)">
+    <rect class="node" width="300" height="128" rx="8"/>
+    <text x="24" y="38" class="node-title">3. API Client</text>
+    <text x="24" y="66" class="node-text">Same-origin on Render</text>
+    <text x="24" y="90" class="node-text">localhost:8000 fallback in dev</text>
+  </g>
+
+  <g transform="translate(1210 180)">
+    <rect class="node" width="300" height="128" rx="8"/>
+    <text x="24" y="38" class="node-title">4. FastAPI Router</text>
+    <text x="24" y="66" class="node-text">/api/audit, /api/audit-llm-output</text>
+    <text x="24" y="90" class="node-text">upload, settings, reports, review</text>
+  </g>
+
+  <path class="arrow" d="M340 244H430"/>
+  <path class="arrow" d="M730 244H820"/>
+  <path class="arrow" d="M1120 244H1210"/>
+
+  <g transform="translate(130 470)">
+    <rect class="node node-accent" width="260" height="116" rx="8"/>
+    <text x="22" y="36" class="node-title">5. Validate Input</text>
+    <text x="22" y="64" class="node-text">Plain text or mapped dataset</text>
+    <text x="22" y="88" class="node-text">Depth: fast, standard, thorough</text>
+  </g>
+
+  <g transform="translate(480 430)">
+    <rect class="mini" width="210" height="92" rx="8"/>
+    <text x="20" y="34" class="mini-title">Bias Detection</text>
+    <text x="20" y="58" class="mini-text">Demographic parity</text>
+    <text x="20" y="76" class="mini-text">Equalized opportunity</text>
+  </g>
+  <g transform="translate(735 430)">
+    <rect class="mini" width="210" height="92" rx="8"/>
+    <text x="20" y="34" class="mini-title">Truth Verification</text>
+    <text x="20" y="58" class="mini-text">FAISS retrieval</text>
+    <text x="20" y="76" class="mini-text">Claim-level citations</text>
+  </g>
+  <g transform="translate(480 555)">
+    <rect class="mini" width="210" height="92" rx="8"/>
+    <text x="20" y="34" class="mini-title">Cluster Analysis</text>
+    <text x="20" y="58" class="mini-text">Subgroup fairness</text>
+    <text x="20" y="76" class="mini-text">KMeans profile check</text>
+  </g>
+  <g transform="translate(735 555)">
+    <rect class="mini" width="210" height="92" rx="8"/>
+    <text x="20" y="34" class="mini-title">Distribution Check</text>
+    <text x="20" y="58" class="mini-text">Stability and drift</text>
+    <text x="20" y="76" class="mini-text">Label balance statistics</text>
+  </g>
+
+  <g transform="translate(1050 470)">
+    <rect class="node" width="260" height="116" rx="8"/>
+    <text x="22" y="36" class="node-title">6. Trust Scoring</text>
+    <text x="22" y="64" class="node-text">Weighted score by industry preset</text>
+    <text x="22" y="88" class="node-text">Truth + fairness + confidence</text>
+  </g>
+
+  <g transform="translate(1370 470)">
+    <rect class="node node-accent" width="180" height="116" rx="8"/>
+    <text x="20" y="36" class="node-title">7. Action</text>
+    <text x="20" y="64" class="node-text">Correct output</text>
+    <text x="20" y="88" class="node-text">Flag review if low</text>
+  </g>
+
+  <path class="arrow" d="M1270 308C1270 390 260 378 260 470"/>
+  <path class="arrow" d="M390 528H480"/>
+  <path class="arrow" d="M690 476H735"/>
+  <path class="arrow" d="M690 600H735"/>
+  <path class="arrow" d="M945 476C990 476 1008 503 1050 516"/>
+  <path class="arrow" d="M945 600C990 600 1008 553 1050 540"/>
+  <path class="arrow" d="M1310 528H1370"/>
+
+  <rect x="466" y="396" width="494" height="18" rx="9" class="badge"/>
+  <text x="632" y="410" class="badge-text">PARALLEL ANALYSIS GROUP</text>
+
+  <g transform="translate(110 790)">
+    <rect class="store" width="260" height="120" rx="8"/>
+    <text x="22" y="38" class="store-title">SQLite on Render Disk</text>
+    <text x="22" y="66" class="store-text">audits, reports, feedback</text>
+    <text x="22" y="90" class="store-text">review queue, settings</text>
+  </g>
+
+  <g transform="translate(450 790)">
+    <rect class="store" width="270" height="120" rx="8"/>
+    <text x="22" y="38" class="store-title">Knowledge Base</text>
+    <text x="22" y="66" class="store-text">CSV/article upload</text>
+    <text x="22" y="90" class="store-text">title, content, source</text>
+  </g>
+
+  <g transform="translate(800 790)">
+    <rect class="store" width="270" height="120" rx="8"/>
+    <text x="22" y="38" class="store-title">FAISS IndexFlatIP</text>
+    <text x="22" y="66" class="store-text">Gemini embeddings when keyed</text>
+    <text x="22" y="90" class="store-text">local TF-IDF fallback otherwise</text>
+  </g>
+
+  <g transform="translate(1150 790)">
+    <rect class="node" width="320" height="120" rx="8"/>
+    <text x="22" y="38" class="node-title">Reports and Review</text>
+    <text x="22" y="66" class="node-text">Dashboard charts, exports, citations</text>
+    <text x="22" y="90" class="node-text">Approve, reject, or escalate</text>
+  </g>
+
+  <path class="arrow-soft" d="M280 586V790"/>
+  <path class="arrow-soft" d="M580 647C580 705 585 736 585 790"/>
+  <path class="arrow" d="M720 850H800"/>
+  <path class="arrow-soft" d="M935 790C935 690 820 665 820 647"/>
+  <path class="arrow" d="M1455 586C1455 665 1310 710 1310 790"/>
+  <path class="arrow-soft" d="M1150 850C1000 980 425 978 240 910"/>
+
+  <text x="80" y="990" class="subtitle">Recommended production path: keep SQLite on a Render disk for demo reliability; move audits/users to managed Postgres and heavy retrieval to pgvector, Qdrant, or Pinecone as traffic and corpus size grow.</text>
+</svg>

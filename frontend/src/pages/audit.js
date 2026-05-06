@@ -1,3 +1,5 @@
+import { escapeHtml } from '../utils.js';
+
 export async function renderAuditPage(rootEl, api) {
     rootEl.innerHTML = `
         <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:1.5rem;">
@@ -117,7 +119,7 @@ Example JSON: {"features": [[1,5,3,50],[0,2,4,30]], "labels": [1,0], "protected_
         const file = e.target.files[0];
         if (!file) return;
         csvStatus.style.display = 'block';
-        csvStatus.innerHTML = '<div style="font-size:0.78rem; color:var(--accent-cyan);">⏳ Uploading and parsing <strong>' + file.name + '</strong> (' + (file.size/1024).toFixed(1) + ' KB)...</div>';
+        csvStatus.innerHTML = '<div style="font-size:0.78rem; color:var(--accent-cyan);">Uploading and parsing <strong>' + escapeHtml(file.name) + '</strong> (' + (file.size/1024).toFixed(1) + ' KB)...</div>';
         const uploadBtn = document.getElementById('btn-upload-audit-csv');
         uploadBtn.disabled = true;
         uploadBtn.textContent = '⏳ Parsing...';
@@ -128,21 +130,21 @@ Example JSON: {"features": [[1,5,3,50],[0,2,4,30]], "labels": [1,0], "protected_
             if (data && data.status === 'success' && data.dataset) {
                 document.getElementById('audit-input').value = JSON.stringify(data.dataset, null, 2);
                 csvStatus.innerHTML = '<div style="padding:0.75rem; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2); border-radius:6px; margin-top:0.5rem;">'
-                    + '<div style="font-size:0.82rem; font-weight:600; color:var(--accent-emerald);">✅ Dataset Loaded: ' + file.name + '</div>'
+                    + '<div style="font-size:0.82rem; font-weight:600; color:var(--accent-emerald);">Dataset Loaded: ' + escapeHtml(file.name) + '</div>'
                     + '<div style="display:grid; grid-template-columns:repeat(4,1fr); gap:0.5rem; margin-top:0.5rem;">'
                     + '<div style="text-align:center; padding:0.4rem; background:rgba(255,255,255,0.03); border-radius:4px;"><div style="font-size:1rem; font-weight:700; color:var(--accent-cyan);">' + data.rows + '</div><div style="font-size:0.65rem; color:var(--text-muted);">Rows</div></div>'
                     + '<div style="text-align:center; padding:0.4rem; background:rgba(255,255,255,0.03); border-radius:4px;"><div style="font-size:1rem; font-weight:700; color:var(--accent-purple);">' + data.num_features + '</div><div style="font-size:0.65rem; color:var(--text-muted);">Features</div></div>'
-                    + '<div style="text-align:center; padding:0.4rem; background:rgba(255,255,255,0.03); border-radius:4px;"><div style="font-size:1rem; font-weight:700; color:var(--accent-amber);">' + data.label_column + '</div><div style="font-size:0.65rem; color:var(--text-muted);">Label</div></div>'
-                    + '<div style="text-align:center; padding:0.4rem; background:rgba(255,255,255,0.03); border-radius:4px;"><div style="font-size:1rem; font-weight:700; color:var(--accent-emerald);">' + data.columns[0] + '</div><div style="font-size:0.65rem; color:var(--text-muted);">Protected</div></div>'
+                    + '<div style="text-align:center; padding:0.4rem; background:rgba(255,255,255,0.03); border-radius:4px;"><div style="font-size:1rem; font-weight:700; color:var(--accent-amber);">' + escapeHtml(data.label_column) + '</div><div style="font-size:0.65rem; color:var(--text-muted);">Label</div></div>'
+                    + '<div style="text-align:center; padding:0.4rem; background:rgba(255,255,255,0.03); border-radius:4px;"><div style="font-size:1rem; font-weight:700; color:var(--accent-emerald);">' + escapeHtml(data.columns[0]) + '</div><div style="font-size:0.65rem; color:var(--text-muted);">Protected</div></div>'
                     + '</div>'
-                    + '<div style="font-size:0.72rem; color:var(--text-muted); margin-top:0.5rem;">Columns: <strong>' + data.columns.join(', ') + '</strong></div>'
+                    + '<div style="font-size:0.72rem; color:var(--text-muted); margin-top:0.5rem;">Columns: <strong>' + escapeHtml(data.columns.join(', ')) + '</strong></div>'
                     + '<div style="font-size:0.72rem; color:var(--accent-cyan); margin-top:0.3rem;">👉 Click <strong>"Run Full Audit"</strong> below to run the 8-step pipeline on this dataset.</div>'
                     + '</div>';
             } else {
-                csvStatus.innerHTML = '<div style="font-size:0.78rem; color:var(--accent-red); margin-top:0.5rem;">❌ Failed: ' + ((data && (data.detail || data.error)) || 'Unknown error') + '</div>';
+                csvStatus.innerHTML = '<div style="font-size:0.78rem; color:var(--accent-red); margin-top:0.5rem;">Failed: ' + escapeHtml((data && (data.detail || data.error)) || 'Unknown error') + '</div>';
             }
         } catch (err) {
-            csvStatus.innerHTML = '<div style="font-size:0.78rem; color:var(--accent-red); margin-top:0.5rem;">❌ Upload failed: ' + err.message + '</div>';
+            csvStatus.innerHTML = '<div style="font-size:0.78rem; color:var(--accent-red); margin-top:0.5rem;">Upload failed: ' + escapeHtml(err.message) + '</div>';
         }
         uploadBtn.disabled = false;
         uploadBtn.textContent = '📁 Choose CSV File';
@@ -259,8 +261,8 @@ function buildFullResult(r) {
         const timing = s.elapsed > 0 ? '<span style="color:var(--accent-cyan); font-size:0.65rem;">' + (s.elapsed * 1000).toFixed(0) + 'ms</span>' : '';
         return '<div style="display:flex; align-items:center; gap:0.75rem; padding:0.6rem 0.75rem; background:' + bg + '; border:1px solid ' + border + '; border-radius:6px;">' +
             '<div style="font-size:1rem; width:24px; text-align:center;">' + stepIcons[i] + '</div>' +
-            '<div style="flex:1;"><div style="font-size:0.78rem; font-weight:600; color:' + color + ';">Step ' + s.step + ': ' + s.name + ' <span style="font-weight:400; opacity:0.7;">' + badge + '</span></div>' +
-            '<div style="font-size:0.68rem; color:var(--text-muted); margin-top:1px;">' + s.detail + '</div></div>' +
+            '<div style="flex:1;"><div style="font-size:0.78rem; font-weight:600; color:' + color + ';">Step ' + escapeHtml(s.step) + ': ' + escapeHtml(s.name) + ' <span style="font-weight:400; opacity:0.7;">' + badge + '</span></div>' +
+            '<div style="font-size:0.68rem; color:var(--text-muted); margin-top:1px;">' + escapeHtml(s.detail) + '</div></div>' +
             timing + '</div>';
     }).join('');
 
@@ -271,9 +273,9 @@ function buildFullResult(r) {
     // Citations
     const citationsHTML = (r.truth.citations || []).map(c =>
         '<div style="padding:0.5rem; background:rgba(255,255,255,0.03); border-radius:4px; margin-bottom:0.4rem;">' +
-        '<div style="font-size:0.78rem; font-weight:600; color:var(--accent-cyan);">' + c.title + '</div>' +
-        '<div style="font-size:0.7rem; color:var(--text-muted);">' + (c.snippet || '').substring(0, 120) + '...</div>' +
-        '<div style="font-size:0.65rem; color:var(--text-muted); margin-top:2px;">Similarity: ' + (c.similarity * 100).toFixed(1) + '% | ' + c.source + '</div></div>'
+        '<div style="font-size:0.78rem; font-weight:600; color:var(--accent-cyan);">' + escapeHtml(c.title || 'Untitled source') + '</div>' +
+        '<div style="font-size:0.7rem; color:var(--text-muted);">' + escapeHtml((c.snippet || '').substring(0, 120)) + '...</div>' +
+        '<div style="font-size:0.65rem; color:var(--text-muted); margin-top:2px;">Similarity: ' + (Number(c.similarity || 0) * 100).toFixed(1) + '% | ' + escapeHtml(c.source || 'N/A') + '</div></div>'
     ).join('');
 
     return `
@@ -282,7 +284,7 @@ function buildFullResult(r) {
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem;">
                 <div>
                     <div style="font-size:0.72rem; color:var(--text-muted);">AUDIT COMPLETE — ${r.depth.toUpperCase()} MODE</div>
-                    <h3 style="font-size:1.1rem; font-weight:700; font-family:var(--font-mono);">ID: ${r.audit_id}</h3>
+                    <h3 style="font-size:1.1rem; font-weight:700; font-family:var(--font-mono);">ID: ${escapeHtml(r.audit_id)}</h3>
                 </div>
                 <div style="text-align:right;">
                     <div style="font-size:2rem; font-weight:700; color:${tsColor};">${ts}%</div>
@@ -329,13 +331,13 @@ function buildFullResult(r) {
             <div class="card glass-card">
                 <h4 style="font-size:0.9rem; margin-bottom:0.75rem;">🔧 Auto-Correction Output</h4>
                 <div style="font-size:0.82rem; color:var(--text-secondary); line-height:1.5; padding:0.75rem; background:rgba(16,185,129,0.05); border-left:3px solid var(--accent-emerald); border-radius:0 4px 4px 0;">
-                    ${r.corrections || 'No corrections needed — output approved as-is.'}
+                    ${r.corrections ? escapeHtml(r.corrections) : 'No corrections needed — output approved as-is.'}
                 </div>
-                ${r.correction_actions && r.correction_actions.length > 0 ? '<div style="margin-top:0.5rem; font-size:0.72rem; color:var(--text-muted);">Actions: ' + r.correction_actions.join(', ') + '</div>' : ''}
+                ${r.correction_actions && r.correction_actions.length > 0 ? '<div style="margin-top:0.5rem; font-size:0.72rem; color:var(--text-muted);">Actions: ' + escapeHtml(r.correction_actions.join(', ')) + '</div>' : ''}
             </div>
         </div>
 
-        <div style="text-align:center;"><a href="#/reports/${r.audit_id}" class="btn btn-primary" style="display:inline-flex;">View Full Report →</a></div>
+        <div style="text-align:center;"><a href="#/reports/${encodeURIComponent(r.audit_id)}" class="btn btn-primary" style="display:inline-flex;">View Full Report →</a></div>
     `;
 }
 
@@ -361,11 +363,11 @@ async function runWithLiveSteps(api, endpoint, payload, label) {
 function renderLiveStepCard(label, steps, activeIdx) {
     return `
     <div class="card glass-card">
-        <h3 class="card-title" style="margin-bottom:0.75rem;">${label}</h3>
+        <h3 class="card-title" style="margin-bottom:0.75rem;">${escapeHtml(label)}</h3>
         <div style="display:flex; flex-direction:column; gap:0.45rem;">
             ${steps.map((s, i) => `
                 <div style="padding:0.55rem 0.7rem; border-radius:6px; border:1px solid ${i <= activeIdx ? 'rgba(16,185,129,0.25)' : 'rgba(255,255,255,0.08)'}; background:${i <= activeIdx ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.03)'};">
-                    <span style="font-size:0.78rem; color:${i <= activeIdx ? 'var(--accent-emerald)' : 'var(--text-secondary)'};">${i <= activeIdx ? '✓' : '•'} ${s}</span>
+                    <span style="font-size:0.78rem; color:${i <= activeIdx ? 'var(--accent-emerald)' : 'var(--text-secondary)'};">${i <= activeIdx ? '✓' : '•'} ${escapeHtml(s)}</span>
                 </div>
             `).join('')}
         </div>

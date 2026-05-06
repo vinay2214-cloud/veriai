@@ -9,6 +9,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import faiss
 from fastapi import HTTPException, status
+from sklearn.feature_extraction.text import TfidfVectorizer
 from ..config import DB_PATH, RAG_SIMILARITY_THRESHOLD
 
 try:
@@ -16,12 +17,14 @@ try:
 except Exception:  # pragma: no cover
     genai = None
 
-_KB_CACHE: Optional[Tuple[faiss.IndexFlatIP, List[Dict[str, str]]]] = None
+_KB_CACHE: Optional[Tuple[faiss.IndexFlatIP, List[Dict[str, str]], Optional[TfidfVectorizer], str]] = None
 _GEMINI_LOCK = Lock()
 _GEMINI_CLIENT = None
 _GEMINI_CLIENT_INITIALIZED = False
 EMBED_MODEL_NAME = os.getenv("VERIAI_EMBED_MODEL", "models/embedding-001")
 EMBED_DIMENSION = 768
+TFIDF_MAX_FEATURES = int(os.getenv("VERIAI_TFIDF_MAX_FEATURES", "4096"))
+TFIDF_SIMILARITY_THRESHOLD = float(os.getenv("VERIAI_TFIDF_THRESHOLD", "0.18"))
 
 
 def invalidate_cache():
@@ -32,6 +35,19 @@ def invalidate_cache():
 
 def _gemini_api_key() -> str:
     return (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip()
+
+
+def embedding_service_configured() -> bool:
+    """Return whether semantic embedding credentials are configured."""
+    return bool(_gemini_api_key()) and genai is not None
+
+
+def active_vector_mode() -> str:
+    if _KB_CACHE is not None:
+        return _KB_CACHE[3]
+    if embedding_service_configured():
+        return f"gemini:{EMBED_MODEL_NAME}"
+    return "local_tfidf"
 
 
 def _get_gemini_client():
@@ -116,6 +132,29 @@ async def _encode_texts(texts: List[str]) -> np.ndarray:
     return np.vstack(vectors).astype(np.float32)
 
 
+def _normalize_matrix(matrix: np.ndarray) -> np.ndarray:
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    return (matrix / norms).astype(np.float32)
+
+
+def _build_tfidf_index(texts: List[str]) -> Tuple[faiss.IndexFlatIP, TfidfVectorizer]:
+    """Build a local FAISS index when external embedding credentials are absent."""
+    vectorizer = TfidfVectorizer(
+        stop_words="english",
+        ngram_range=(1, 2),
+        max_features=TFIDF_MAX_FEATURES,
+    )
+    sparse = vectorizer.fit_transform(texts)
+    matrix = sparse.astype(np.float32).toarray()
+    if matrix.shape[1] == 0:
+        matrix = np.zeros((len(texts), 1), dtype=np.float32)
+    matrix = _normalize_matrix(matrix)
+    index = faiss.IndexFlatIP(matrix.shape[1])
+    index.add(matrix)
+    return index, vectorizer
+
+
 async def _load_knowledge_base():
     """Load KB rows and build a FAISS index from semantic embeddings."""
     global _KB_CACHE
@@ -137,11 +176,14 @@ async def _load_knowledge_base():
     records = [{"title": r[0], "content": r[1], "source": r[2]} for r in rows]
     texts = [rec["content"] for rec in records]
 
-    matrix = await _encode_texts(texts)
-    index = faiss.IndexFlatIP(EMBED_DIMENSION)
-    index.add(matrix)
-
-    _KB_CACHE = (index, records)
+    if embedding_service_configured():
+        matrix = await _encode_texts(texts)
+        index = faiss.IndexFlatIP(EMBED_DIMENSION)
+        index.add(matrix)
+        _KB_CACHE = (index, records, None, f"gemini:{EMBED_MODEL_NAME}")
+    else:
+        index, vectorizer = _build_tfidf_index(texts)
+        _KB_CACHE = (index, records, vectorizer, "local_tfidf")
     return _KB_CACHE
 
 
@@ -164,7 +206,10 @@ async def verify_claims(claim: str, top_k: int = 3) -> Dict:
             "retrieved_context": [],
         }
 
-    faiss_index, records = result if result and result[0] is not None else (None, [])
+    if result and result[0] is not None:
+        faiss_index, records, vectorizer, vector_mode = result
+    else:
+        faiss_index, records, vectorizer, vector_mode = None, [], None, active_vector_mode()
 
     if faiss_index is None or len(records) == 0:
         return {
@@ -175,13 +220,21 @@ async def verify_claims(claim: str, top_k: int = 3) -> Dict:
             "retrieved_context": [],
         }
 
-    query_dense = await _encode_texts([claim])
+    if vectorizer is None:
+        query_dense = await _encode_texts([claim])
+        threshold = RAG_SIMILARITY_THRESHOLD
+    else:
+        query_dense = vectorizer.transform([claim]).astype(np.float32).toarray()
+        if query_dense.shape[1] == 0:
+            query_dense = np.zeros((1, faiss_index.d), dtype=np.float32)
+        query_dense = _normalize_matrix(query_dense)
+        threshold = TFIDF_SIMILARITY_THRESHOLD
     D, I = faiss_index.search(query_dense, min(top_k, len(records)))
 
     top_sims = D[0]
     top_idxs = I[0]
     groundedness = float(np.mean(top_sims)) if len(top_sims) > 0 else 0.0
-    truth_score = min(groundedness / RAG_SIMILARITY_THRESHOLD, 1.0)
+    truth_score = min(groundedness / threshold, 1.0)
 
     citations = []
     retrieved_context = []
@@ -209,8 +262,5 @@ async def verify_claims(claim: str, top_k: int = 3) -> Dict:
         "groundedness": round(groundedness, 4),
         "citations": citations,
         "retrieved_context": retrieved_context,
-        "embedding_model": EMBED_MODEL_NAME,
+        "embedding_model": vector_mode,
     }
-
-
-_get_gemini_client()

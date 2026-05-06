@@ -204,9 +204,13 @@ async def knowledge_base_stats():
     # Build the FAISS cache lazily so the Settings page reflects the real
     # indexed state after startup, before the first truth-check request.
     from ..services import truth_service
+    index_error = None
     if total > 0 and truth_service._KB_CACHE is None:
-        await truth_service._load_knowledge_base()
-    faiss_status = "connected" if truth_service._KB_CACHE is not None else "disconnected"
+        try:
+            await truth_service._load_knowledge_base()
+        except Exception as exc:
+            index_error = str(exc)
+    faiss_status = "connected" if truth_service._KB_CACHE is not None else ("empty" if total == 0 else "degraded")
     
     conn.close()
     
@@ -215,7 +219,9 @@ async def knowledge_base_stats():
         "recent_articles": recent,
         "faiss_status": faiss_status,
         "index_type": "FAISS IndexFlatIP (Cosine Similarity)",
-        "vectorizer": "Gemini models/embedding-001 (768-dim)"
+        "vectorizer": truth_service.active_vector_mode(),
+        "embedding_configured": truth_service.embedding_service_configured(),
+        "index_error": index_error,
     }
 
 
@@ -224,9 +230,23 @@ async def rebuild_faiss_index():
     """Force rebuild the FAISS index from the current knowledge base."""
     invalidate_cache()
     
-    # Trigger a rebuild by calling verify_claims with a dummy query
+    # Trigger a rebuild by calling verify_claims with a dummy query.
+    # This uses Gemini embeddings when configured and local TF-IDF otherwise.
     from ..services.truth_service import verify_claims
-    result = await verify_claims("test rebuild query")
+    try:
+        await verify_claims("test rebuild query")
+    except Exception as exc:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM knowledge_base")
+        total = cursor.fetchone()[0]
+        conn.close()
+        return {
+            "status": "failed",
+            "total_articles": total,
+            "index_dimensions": 0,
+            "message": f"FAISS index rebuild failed: {exc}",
+        }
     
     from ..services.truth_service import _KB_CACHE
     status = "connected" if _KB_CACHE is not None else "failed"

@@ -168,10 +168,12 @@ async def get_review_stats():
     pending = await fetch_one("SELECT COUNT(*) FROM review_queue WHERE status = 'pending'")
     approved = await fetch_one("SELECT COUNT(*) FROM review_queue WHERE status = 'approved'")
     rejected = await fetch_one("SELECT COUNT(*) FROM review_queue WHERE status = 'rejected'")
+    escalated = await fetch_one("SELECT COUNT(*) FROM review_queue WHERE status = 'escalated'")
     return {
         "pending": pending[0] if pending else 0,
         "approved": approved[0] if approved else 0,
         "rejected": rejected[0] if rejected else 0,
+        "escalated": escalated[0] if escalated else 0,
     }
 
 

@@ -1,3 +1,5 @@
+import { escapeHtml, formatDate } from '../utils.js';
+
 export async function renderReportsPage(rootEl, api, id = null) {
     if (id) {
         // Detailed report view
@@ -25,14 +27,14 @@ export async function renderReportsPage(rootEl, api, id = null) {
                         <tbody>
                             ${recent ? recent.map(r => `
                                 <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
-                                    <td style="padding: 16px;"><span class="badge badge-purple" style="font-family:var(--font-mono);">${r.audit_id.substring(0,8)}...</span></td>
-                                    <td style="padding: 16px; color:var(--text-secondary);">${new Date().toLocaleDateString()}</td>
-                                    <td style="padding: 16px; color:var(--text-primary); max-width:250px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${r.input}</td>
+                                    <td style="padding: 16px;"><span class="badge badge-purple" style="font-family:var(--font-mono);">${escapeHtml(r.audit_id.substring(0,8))}...</span></td>
+                                    <td style="padding: 16px; color:var(--text-secondary);">${formatDate(r.created_at)}</td>
+                                    <td style="padding: 16px; color:var(--text-primary); max-width:250px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(r.input)}</td>
                                     <td style="padding: 16px;">
                                         <span style="font-weight:600; color:${r.trust_score > 0.8 ? 'var(--accent-emerald)' : (r.trust_score > 0.5 ? 'var(--accent-amber)' : 'var(--accent-red)')}">${(r.trust_score*100).toFixed(1)}%</span>
                                     </td>
                                     <td style="padding: 16px;">
-                                        <a href="#/reports/${r.audit_id}" class="btn btn-action" style="padding:0.4rem 1rem; font-size:0.85rem; background:rgba(255,255,255,0.05); border:1px solid var(--border-glass); border-radius:var(--radius-sm); text-decoration:none; color:var(--accent-cyan); display:inline-block;">View Details</a>
+                                        <a href="#/reports/${encodeURIComponent(r.audit_id)}" class="btn btn-action" style="padding:0.4rem 1rem; font-size:0.85rem; background:rgba(255,255,255,0.05); border:1px solid var(--border-glass); border-radius:var(--radius-sm); text-decoration:none; color:var(--accent-cyan); display:inline-block;">View Details</a>
                                     </td>
                                 </tr>
                             `).join('') : `<tr><td colspan="5" style="text-align:center; padding:30px; color:var(--text-muted);">No reports found in history.</td></tr>`}
@@ -64,7 +66,7 @@ async function renderSingleReport(rootEl, api, id) {
                     <svg width="24" height="24" fill="none" stroke="var(--accent-purple)" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"/><path d="M14 3v5h5M16 13H8M16 17H8M10 9H8"/></svg>
                     Audit Report Document
                 </h3>
-                <span class="badge badge-purple" style="font-family:var(--font-mono); font-size:0.9rem;">ID: ${report.audit_id}</span>
+                <span class="badge badge-purple" style="font-family:var(--font-mono); font-size:0.9rem;">ID: ${escapeHtml(report.audit_id)}</span>
             </div>
             
             <div class="grid grid-2" style="margin-top:2rem; gap:2rem;">
@@ -76,7 +78,7 @@ async function renderSingleReport(rootEl, api, id) {
                             Original Input Payload
                         </h4>
                         <div style="background:rgba(0,0,0,0.3); padding:1.25rem; border-radius:var(--radius-md); border:1px solid var(--border-glass); font-size:0.9rem; font-family:var(--font-mono); color:var(--text-secondary); word-break:break-all; max-height:200px; overflow-y:auto; box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);">
-                            ${report.input}
+                            ${escapeHtml(report.input)}
                         </div>
                     </div>
                     
@@ -86,7 +88,7 @@ async function renderSingleReport(rootEl, api, id) {
                             VeriAI Safely Corrected Output
                         </h4>
                         <div style="background:linear-gradient(145deg, rgba(16,185,129,0.05), rgba(52,211,153,0.1)); border:1px solid rgba(16,185,129,0.3); padding:1.25rem; border-radius:var(--radius-md); font-size:0.95rem; color:var(--text-primary); text-shadow: 0 0 1px rgba(255,255,255,0.1); line-height: 1.6;">
-                            ${report.corrected || '<span style="color:var(--text-muted); font-style:italic;">No corrections were required for this payload.</span>'}
+                            ${report.corrected ? escapeHtml(report.corrected) : '<span style="color:var(--text-muted); font-style:italic;">No corrections were required for this payload.</span>'}
                         </div>
                     </div>
                 </div>
@@ -111,10 +113,10 @@ async function renderSingleReport(rootEl, api, id) {
                     
                     <div style="margin-top:auto; padding-top:1.5rem;">
                         <div style="display:flex; gap:0.5rem;">
-                            <a class="btn btn-action" href="/api/reports/${report.audit_id}/export?format=pdf" style="flex:1; padding:0.75rem; background:rgba(255,255,255,0.05); color:var(--text-primary); border:1px solid var(--border-glass); border-radius:var(--radius-md); display:flex; align-items:center; justify-content:center; gap:0.5rem; text-decoration:none;">
+                            <a class="btn btn-action" href="/api/reports/${encodeURIComponent(report.audit_id)}/export?format=pdf" style="flex:1; padding:0.75rem; background:rgba(255,255,255,0.05); color:var(--text-primary); border:1px solid var(--border-glass); border-radius:var(--radius-md); display:flex; align-items:center; justify-content:center; gap:0.5rem; text-decoration:none;">
                                 <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg> Export PDF
                             </a>
-                            <a class="btn btn-action" href="/api/reports/${report.audit_id}/export?format=json" style="flex:1; padding:0.75rem; background:rgba(59,130,246,0.08); color:var(--accent-cyan); border:1px solid rgba(59,130,246,0.25); border-radius:var(--radius-md); display:flex; align-items:center; justify-content:center; gap:0.5rem; text-decoration:none;">
+                            <a class="btn btn-action" href="/api/reports/${encodeURIComponent(report.audit_id)}/export?format=json" style="flex:1; padding:0.75rem; background:rgba(59,130,246,0.08); color:var(--accent-cyan); border:1px solid rgba(59,130,246,0.25); border-radius:var(--radius-md); display:flex; align-items:center; justify-content:center; gap:0.5rem; text-decoration:none;">
                                 JSON
                             </a>
                         </div>

@@ -18,7 +18,7 @@ export async function renderHomePage(rootEl, api) {
                 background: var(--gradient-accent);
                 -webkit-background-clip: text;
                 -webkit-text-fill-color: transparent;
-                letter-spacing: -0.05em;
+                letter-spacing: 0;
             }
             .home-hero p {
                 font-size: 1.25rem;

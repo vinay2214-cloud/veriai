@@ -12,7 +12,8 @@ from pathlib import Path
 # Database configuration
 # ---------------------------------------------------------------------------
 # SQLite file stored in the project root for local development.
-# On Render (read-only filesystem), falls back to /tmp.
+# On Render, prefer VERIAI_DB_PATH on a persistent disk (for example
+# /var/data/veriai.db); otherwise fall back to /tmp on read-only filesystems.
 BASE_DIR = Path(__file__).resolve().parent.parent
 _default_db = str(BASE_DIR / "veriai.db")
 
@@ -20,6 +21,11 @@ def _resolve_db_path() -> str:
     """Return a writable SQLite path."""
     explicit = os.getenv("VERIAI_DB_PATH", "").strip()
     if explicit:
+        path = Path(explicit)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
         return explicit
     # Check if project root is writable
     try:
@@ -33,6 +39,19 @@ def _resolve_db_path() -> str:
 
 DB_PATH = _resolve_db_path()
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+
+
+def _split_csv_env(name: str, default: str = "") -> list[str]:
+    raw = os.getenv(name, default)
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+CORS_ORIGINS = _split_csv_env(
+    "VERIAI_CORS_ORIGINS",
+    "http://localhost:3000,http://127.0.0.1:3000,"
+    "http://localhost:8000,http://127.0.0.1:8000,"
+    "https://veriai-eyxl.onrender.com",
+)
 
 
 def get_async_database_url() -> str:

@@ -1,51 +1,88 @@
-import { renderLogin } from './pages/login.js?v=17';
-import { renderDashboard } from './pages/dashboard.js?v=17';
-import { renderAuditPage } from './pages/audit.js?v=17';
-import { renderReportsPage } from './pages/reports.js?v=17';
-import { renderFeedbackPage } from './pages/feedback.js?v=17';
-import { renderSettingsPage } from './pages/settings.js?v=17';
-import { renderReviewPage } from './pages/review.js?v=17';
+import { renderLogin } from './pages/login.js?v=19';
+import { renderDashboard } from './pages/dashboard.js?v=19';
+import { renderAuditPage } from './pages/audit.js?v=19';
+import { renderReportsPage } from './pages/reports.js?v=19';
+import { renderFeedbackPage } from './pages/feedback.js?v=19';
+import { renderSettingsPage } from './pages/settings.js?v=19';
+import { renderReviewPage } from './pages/review.js?v=19';
 
-export const API_BASE = window.location.origin + '/api';
+function normalizeApiBase(value) {
+    return value.replace(/\/+$/, '').endsWith('/api')
+        ? value.replace(/\/+$/, '')
+        : `${value.replace(/\/+$/, '')}/api`;
+}
+
+function resolveApiBase() {
+    const configured = window.VERIAI_API_BASE || document.querySelector('meta[name="veriai-api-base"]')?.content;
+    if (configured) return normalizeApiBase(configured);
+
+    const { protocol, hostname, port, origin } = window.location;
+    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+    const staticDevPorts = new Set(['3000', '5173', '5174', '8080']);
+    if (protocol === 'file:' || (isLocal && staticDevPorts.has(port))) {
+        return 'http://127.0.0.1:8000/api';
+    }
+    return `${origin}/api`;
+}
+
+export const API_BASE = resolveApiBase();
+
+function showApiNotice(message) {
+    let notice = document.getElementById('api-toast');
+    if (!notice) {
+        notice = document.createElement('div');
+        notice.id = 'api-toast';
+        notice.className = 'api-toast';
+        document.body.appendChild(notice);
+    }
+    notice.textContent = message;
+    notice.classList.add('visible');
+    window.clearTimeout(showApiNotice.timer);
+    showApiNotice.timer = window.setTimeout(() => notice.classList.remove('visible'), 4200);
+}
+
+async function parseResponse(res) {
+    const text = await res.text();
+    if (!text) return null;
+    try {
+        return JSON.parse(text);
+    } catch (_err) {
+        return { detail: text };
+    }
+}
 
 // Simple API Client
 export const apiClient = {
-    async get(endpoint) {
+    async request(endpoint, options = {}) {
         try {
-            const res = await fetch(`${API_BASE}${endpoint}`);
-            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-            return await res.json();
+            const res = await fetch(`${API_BASE}${endpoint}`, options);
+            const payload = await parseResponse(res);
+            if (!res.ok) {
+                const detail = payload?.detail || payload?.error || `HTTP ${res.status}`;
+                throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
+            }
+            return payload;
         } catch (error) {
-            console.error('API GET Error:', error);
+            console.error('API Error:', endpoint, error);
+            showApiNotice(`API issue: ${error.message}`);
             return null;
         }
+    },
+    async get(endpoint) {
+        return this.request(endpoint);
     },
     async post(endpoint, data) {
-        try {
-            const res = await fetch(`${API_BASE}${endpoint}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            });
-            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-            return await res.json();
-        } catch (error) {
-            console.error('API POST Error:', error);
-            return null;
-        }
+        return this.request(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
     },
     async postForm(endpoint, formData) {
-        try {
-            const res = await fetch(`${API_BASE}${endpoint}`, {
-                method: 'POST',
-                body: formData
-            });
-            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-            return await res.json();
-        } catch (error) {
-            console.error('API FORM POST Error:', error);
-            return null;
-        }
+        return this.request(endpoint, {
+            method: 'POST',
+            body: formData
+        });
     }
 };
 
@@ -97,8 +134,12 @@ async function router() {
             if (ambientGlow) ambientGlow.style.display = 'block';
             if (hamburgerBtn) hamburgerBtn.style.display = '';
             if (sidebarOverlay) sidebarOverlay.style.display = '';
-            document.querySelector('.main-content').style.marginLeft = 'var(--sidebar-width)';
-            document.querySelector('.content-area').style.padding = '2rem';
+            const isMobile = window.matchMedia('(max-width: 768px)').matches;
+            document.querySelector('.main-content').style.marginLeft = isMobile ? '0' : 'var(--sidebar-width)';
+            document.querySelector('.content-area').style.padding = isMobile ? '1rem' : '2rem';
+            appRoot.style.padding = '';
+            appRoot.style.height = '';
+            appRoot.style.overflow = '';
         }
 
         // Update UI

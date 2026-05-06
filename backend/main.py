@@ -17,7 +17,7 @@ from starlette.responses import JSONResponse
 
 from .routes import audit, feedback, dashboard, bias_scan, truth_check, correction, report, upload, ml, settings, review, llm_audit, demo, datasets
 from .database import init_db
-from .config import DATABASE_URL
+from .config import CORS_ORIGINS
 from .sqlalchemy_db import init_sqlalchemy_models, close_engine
 from .seed_data import seed_database
 from .logging_config import configure_logging
@@ -146,10 +146,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS for local dev
+# CORS for local dev and the deployed Render origin. Same-origin production
+# traffic does not need CORS, but this keeps the standalone local frontend usable.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

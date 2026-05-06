@@ -9,8 +9,6 @@ export async function renderLogin(rootEl, api) {
         <div class="login-bg">
             <div class="login-grid"></div>
             <div class="login-grid-fade"></div>
-            <div class="login-orb login-orb-1"></div>
-            <div class="login-orb login-orb-2"></div>
         </div>
 
         <div class="login-wrapper">
@@ -23,13 +21,13 @@ export async function renderLogin(rootEl, api) {
                     </svg>
                 </div>
                 <h1 class="login-title">VeriAI</h1>
-                <p class="login-subtitle">AI Trust & Safety Auditor</p>
+                <p class="login-subtitle">AI Trust Operations</p>
             </div>
 
             <!-- Login Card -->
             <div class="login-card-v2">
-                <h2 class="login-card-heading">Welcome back</h2>
-                <p class="login-card-subtext">Sign in to your audit dashboard</p>
+                <h2 class="login-card-heading">Open your audit workspace</h2>
+                <p class="login-card-subtext">Review fairness, truth, correction, and human-review signals from one console.</p>
 
                 <form id="login-form">
                     <div class="login-field">
@@ -51,17 +49,17 @@ export async function renderLogin(rootEl, api) {
                         <a href="#" class="login-forgot">Forgot password?</a>
                     </div>
                     <button type="submit" class="login-submit-btn">
-                        <span>Continue to Dashboard</span>
+                        <span>Continue</span>
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
                     </button>
                 </form>
 
-                <div class="login-divider"><span>Secured by VeriAI</span></div>
+                <div class="login-divider"><span>VeriAI controls</span></div>
 
                 <div class="login-trust-badges">
-                    <span class="login-trust-badge">🔐 AES-256</span>
-                    <span class="login-trust-badge">🛡️ JWT Auth</span>
-                    <span class="login-trust-badge">📋 SOC2 Ready</span>
+                    <span class="login-trust-badge">AES-256</span>
+                    <span class="login-trust-badge">JWT Auth</span>
+                    <span class="login-trust-badge">Audit Logs</span>
                 </div>
             </div>
         </div>

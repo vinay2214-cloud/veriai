@@ -55,7 +55,7 @@ async def review_stats():
     try:
         return await db.get_review_stats()
     except Exception:
-        return {"pending": 0, "approved": 0, "rejected": 0}
+        return {"pending": 0, "approved": 0, "rejected": 0, "escalated": 0}
 
 
 @router.post("/review/{audit_id}/approve")
