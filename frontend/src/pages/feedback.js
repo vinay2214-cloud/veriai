@@ -1,3 +1,6 @@
+import { sanitizeText } from '../utils.js';
+import { showToast } from '../security-utils.js';
+
 export async function renderFeedbackPage(rootEl, api) {
     const history = await api.get('/feedback/history');
 
@@ -99,7 +102,7 @@ export async function renderFeedbackPage(rootEl, api) {
             // Trigger a global Toast Notification (Needs function in window or main.js, we will just use a nice injected alert or custom toast)
             showToast(
                 res.status === 'received_and_retrained' ? 'Feedback Processed! Model Weights Retrained.' : 'Assessment logged successfully to the RLHF queue.', 
-                res.status === 'received_and_retrained' ? 'var(--accent-purple)' : 'var(--accent-emerald)'
+                'success'
             );
             
             // Clear inputs
@@ -124,52 +127,3 @@ export async function renderFeedbackPage(rootEl, api) {
 
 }
 
-// Simple dynamic toast utility so we don't have ugly standard alerts
-function showToast(message, color) {
-    let toastContainer = document.getElementById('toast-container');
-    if (!toastContainer) {
-        toastContainer = document.createElement('div');
-        toastContainer.id = 'toast-container';
-        toastContainer.style.position = 'fixed';
-        toastContainer.style.bottom = '20px';
-        toastContainer.style.right = '20px';
-        toastContainer.style.zIndex = '9999';
-        toastContainer.style.display = 'flex';
-        toastContainer.style.flexDirection = 'column';
-        toastContainer.style.gap = '10px';
-        document.body.appendChild(toastContainer);
-    }
-    
-    const toast = document.createElement('div');
-    toast.style.background = 'rgba(17, 24, 39, 0.9)';
-    toast.style.backdropFilter = 'blur(10px)';
-    toast.style.border = `1px solid ${color}`;
-    toast.style.color = '#fff';
-    toast.style.padding = '12px 20px';
-    toast.style.borderRadius = 'var(--radius-md)';
-    toast.style.boxShadow = `0 4px 15px ${color}33`;
-    toast.style.fontSize = '0.9rem';
-    toast.style.display = 'flex';
-    toast.style.alignItems = 'center';
-    toast.style.gap = '10px';
-    toast.style.transform = 'translateX(100%)';
-    toast.style.opacity = '0';
-    toast.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease';
-    
-    toast.innerHTML = `<div style="width:8px; height:8px; border-radius:50%; background:${color}"></div> ${message}`;
-    
-    toastContainer.appendChild(toast);
-    
-    // Trigger animation
-    requestAnimationFrame(() => {
-        toast.style.transform = 'translateX(0)';
-        toast.style.opacity = '1';
-    });
-    
-    // Remove after 3.5s
-    setTimeout(() => {
-        toast.style.transform = 'translateX(100%)';
-        toast.style.opacity = '0';
-        setTimeout(() => toast.remove(), 300);
-    }, 3500);
-}

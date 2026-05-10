@@ -6,6 +6,9 @@ import { renderFeedbackPage } from './pages/feedback.js?v=19';
 import { renderSettingsPage } from './pages/settings.js?v=19';
 import { renderReviewPage } from './pages/review.js?v=19';
 
+import { sanitizeText, safeRender } from './utils.js';
+import { showToast } from './security-utils.js';
+
 function normalizeApiBase(value) {
     return value.replace(/\/+$/, '').endsWith('/api')
         ? value.replace(/\/+$/, '')
@@ -28,17 +31,23 @@ function resolveApiBase() {
 export const API_BASE = resolveApiBase();
 
 function showApiNotice(message) {
-    let notice = document.getElementById('api-toast');
-    if (!notice) {
-        notice = document.createElement('div');
-        notice.id = 'api-toast';
-        notice.className = 'api-toast';
-        document.body.appendChild(notice);
+    // Use the new showToast for consistent UX; fall back to old approach
+    try {
+        showToast(message, 'info', 4200);
+    } catch {
+        // Graceful fallback if showToast is unavailable
+        let notice = document.getElementById('api-toast');
+        if (!notice) {
+            notice = document.createElement('div');
+            notice.id = 'api-toast';
+            notice.className = 'api-toast';
+            document.body.appendChild(notice);
+        }
+        notice.textContent = message;
+        notice.classList.add('visible');
+        window.clearTimeout(showApiNotice.timer);
+        showApiNotice.timer = window.setTimeout(() => notice.classList.remove('visible'), 4200);
     }
-    notice.textContent = message;
-    notice.classList.add('visible');
-    window.clearTimeout(showApiNotice.timer);
-    showApiNotice.timer = window.setTimeout(() => notice.classList.remove('visible'), 4200);
 }
 
 async function parseResponse(res) {
@@ -148,22 +157,24 @@ async function router() {
         const navEl = document.getElementById(`nav-${baseRoute.substring(1)}`);
         if (navEl) navEl.classList.add('active');
 
-        // Render Route
-        appRoot.innerHTML = '<div class="loading-overlay"><div class="loading-spinner"></div><div>Loading...</div></div>';
+        // Render Route with safe loading state
+        appRoot.innerHTML = `<div class="loading-overlay"><div class="loading-spinner"></div><div>Loading...</div></div>`;
         try {
             await route.render(appRoot, apiClient, id);
         } catch (err) {
             console.error('Route render error:', err);
-            appRoot.innerHTML = `
+            // Use safe rendering to prevent XSS from error messages
+            const safeError = sanitizeText(err.message || 'Unknown error', { maxLength: 200 });
+            appRoot.innerHTML = safeRender`
                 <div class="empty-state">
                     <div class="empty-icon">❌</div>
                     <h3 class="empty-title">Render Error</h3>
-                    <div class="empty-desc" style="font-family: var(--font-mono); color: var(--accent-red);">${err.message}</div>
+                    <div class="empty-desc" style="font-family: var(--font-mono); color: var(--accent-red);">${safeError}</div>
                 </div>
             `;
         }
     } else {
-        appRoot.innerHTML = `
+        appRoot.innerHTML = safeRender`
             <div class="empty-state">
                 <div class="empty-icon">404</div>
                 <h3 class="empty-title">Page Not Found</h3>
@@ -179,3 +190,13 @@ window.addEventListener('hashchange', router);
 // Call router() immediately since the DOM is guaranteed ready when a
 // type="module" script executes.
 router().catch(err => console.error('[VeriAI] Router fatal error:', err));
+
+// Global unhandled rejection handler — prevents crashes from breaking UX
+window.addEventListener('unhandledrejection', (event) => {
+    console.warn('[VeriAI] Unhandled promise rejection caught:', event.reason);
+    try {
+        showToast('Something unexpected happened. The demo will continue to work.', 'warning', 5000);
+    } catch {
+        // Silence — toast is non-critical
+    }
+});
