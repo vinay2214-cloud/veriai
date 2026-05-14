@@ -213,6 +213,7 @@ async def run_audit(input_text: str, num_clusters: int = None, depth: str = "sta
         ),
         "elapsed": step_timings.get("bias", 0),
     })
+    logger.info("Step 1 Bias Analysis: %.3fs", step_timings.get("bias", 0))
 
     # ------------------------------------------------------------------
     # Step 2: Truth Verification (already done in parallel)
@@ -223,6 +224,7 @@ async def run_audit(input_text: str, num_clusters: int = None, depth: str = "sta
         "detail": f"Truth score={truth_result['truth_score']:.3f}, groundedness={truth_result['groundedness']:.3f}",
         "elapsed": step_timings.get("truth", 0),
     })
+    logger.info("Step 2 Truth Verification: %.3fs", step_timings.get("truth", 0))
 
     # ------------------------------------------------------------------
     # Step 3: Cluster analysis
@@ -234,6 +236,7 @@ async def run_audit(input_text: str, num_clusters: int = None, depth: str = "sta
             "detail": "Skipped in fast mode",
             "elapsed": 0,
         })
+        logger.info("Step 3 Cluster Analysis: skipped")
     else:
         steps.append({
             "step": 3, "name": "Cluster Analysis",
@@ -244,6 +247,7 @@ async def run_audit(input_text: str, num_clusters: int = None, depth: str = "sta
             ),
             "elapsed": step_timings.get("cluster", 0),
         })
+        logger.info("Step 3 Cluster Analysis: %.3fs", step_timings.get("cluster", 0))
 
     # ------------------------------------------------------------------
     # Step 4: Distribution analysis
@@ -255,6 +259,7 @@ async def run_audit(input_text: str, num_clusters: int = None, depth: str = "sta
             "detail": "Skipped in fast mode",
             "elapsed": 0,
         })
+        logger.info("Step 4 Distribution Analysis: skipped")
     else:
         steps.append({
             "step": 4, "name": "Distribution Analysis",
@@ -265,6 +270,7 @@ async def run_audit(input_text: str, num_clusters: int = None, depth: str = "sta
             ),
             "elapsed": step_timings.get("distribution", 0),
         })
+        logger.info("Step 4 Distribution Analysis: %.3fs", step_timings.get("distribution", 0))
 
     # ------------------------------------------------------------------
     # Step 5: Compute trust score

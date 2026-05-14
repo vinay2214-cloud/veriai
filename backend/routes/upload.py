@@ -2,14 +2,16 @@
 Accepts a CSV file, parses it, and returns JSON or passes it to the audit engine.
 Also handles knowledge base article uploads for the FAISS vector store.
 """
-from fastapi import APIRouter, UploadFile, File, Form
+from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import List
 import pandas as pd
 import io
 import sqlite3
-from ..config import DB_PATH
+from ..config import DB_PATH, MAX_KB_ARTICLES, MAX_PUBLIC_UPLOAD_MB, MAX_PUBLIC_UPLOAD_ROWS, PUBLIC_UPLOAD_PREVIEW_ROWS
 from ..services.truth_service import invalidate_cache
+from ..services.csv_mapping_service import build_mapped_dataset
+from ..security.file_validator import sanitize_dataframe, scan_for_injection, validate_upload
 
 router = APIRouter()
 
@@ -24,44 +26,110 @@ class KBBulkUpload(BaseModel):
     articles: List[KBArticle]
 
 
+PROTECTED_NAME_HINTS = (
+    "gender",
+    "sex",
+    "race",
+    "ethnicity",
+    "disability",
+    "veteran",
+    "marital",
+)
+
+
+def _is_binary_like(series: pd.Series) -> bool:
+    cleaned = series.astype(str).str.strip().replace({"": pd.NA, "nan": pd.NA, "None": pd.NA})
+    return 0 < cleaned.dropna().nunique() <= 2
+
+
+def _infer_audit_mapping(df: pd.DataFrame) -> dict:
+    columns = df.columns.tolist()
+    if len(columns) < 2:
+        raise ValueError("CSV must have at least one feature column and one target column.")
+
+    target_col = columns[-1]
+    if not _is_binary_like(df[target_col]):
+        binary_candidates = [col for col in reversed(columns) if _is_binary_like(df[col])]
+        if not binary_candidates:
+            raise ValueError("Could not infer a binary target column. Use a CSV with a yes/no or 0/1 target column.")
+        target_col = binary_candidates[0]
+
+    protected_col = None
+    for col in columns:
+        lowered = str(col).lower()
+        if col == target_col:
+            continue
+        if any(hint in lowered for hint in PROTECTED_NAME_HINTS) and _is_binary_like(df[col]):
+            protected_col = col
+            break
+
+    if protected_col is None:
+        for col in columns:
+            if col != target_col and _is_binary_like(df[col]):
+                protected_col = col
+                break
+
+    roles = {col: "feature" for col in columns}
+    roles[target_col] = "target"
+    if protected_col:
+        roles[protected_col] = "protected_attribute"
+    return {"roles": roles}
+
+
+async def _read_public_csv(file: UploadFile) -> pd.DataFrame:
+    upload_meta = await validate_upload(file)
+    if upload_meta["size_bytes"] > MAX_PUBLIC_UPLOAD_MB * 1024 * 1024:
+        raise HTTPException(status_code=413, detail=f"CSV exceeds {MAX_PUBLIC_UPLOAD_MB}MB public demo limit.")
+
+    content = await file.read()
+    try:
+        df = pd.read_csv(io.BytesIO(content), nrows=MAX_PUBLIC_UPLOAD_ROWS + 1)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to parse CSV: {exc}") from exc
+
+    if df.empty:
+        raise HTTPException(status_code=400, detail="Uploaded CSV is empty.")
+    if len(df) > MAX_PUBLIC_UPLOAD_ROWS:
+        df = df.iloc[:MAX_PUBLIC_UPLOAD_ROWS].copy()
+
+    scan_for_injection(df)
+    return sanitize_dataframe(df)
+
+
 @router.post("/upload-csv")
 async def upload_csv(file: UploadFile = File(...)):
-    """Upload and parse a CSV file for bias scanning."""
-    content = await file.read()
-    
+    """Upload and parse a CSV file for bias scanning.
+
+    Public demo uploads are intentionally in-memory only. The endpoint returns
+    a compact numeric dataset payload that can be pasted/run through /api/audit;
+    it does not store raw uploaded files on Render.
+    """
     try:
-        # Read the CSV 
-        df = pd.read_csv(io.BytesIO(content))
-        
-        columns = df.columns.tolist()
-        if len(columns) < 2:
-            return {"error": "CSV must have at least 2 columns"}
-            
-        labels = df[columns[-1]].values.tolist()
-        features = df[columns[:-1]].values.tolist()
-        
-        # Return parsed dataset structure
-        dataset_json = {
-            "features": features,
-            "labels": labels,
-            "feature_names": columns[:-1],
-            "protected_index": 0
-        }
-        
+        df = await _read_public_csv(file)
+        mapping = _infer_audit_mapping(df)
+        dataset_json, normalized_mapping = build_mapped_dataset(df, mapping)
+        target_col = normalized_mapping["target_column"]
+
         return {
             "status": "success",
             "filename": file.filename,
             "rows": len(df),
-            "columns": columns,
-            "num_features": len(columns) - 1,
-            "label_column": columns[-1],
-            "label_distribution": df[columns[-1]].value_counts().to_dict(),
-            "preview": df.head(5).to_dict(orient="records"),
-            "dataset": dataset_json
+            "columns": df.columns.tolist(),
+            "num_features": len(dataset_json["feature_names"]),
+            "label_column": target_col,
+            "protected_attribute": normalized_mapping.get("protected_attribute"),
+            "label_distribution": {str(k): int(v) for k, v in df[target_col].value_counts().to_dict().items()},
+            "preview": df.head(PUBLIC_UPLOAD_PREVIEW_ROWS).to_dict(orient="records"),
+            "mapping": normalized_mapping,
+            "dataset": dataset_json,
+            "storage_policy": "processed_in_memory_raw_file_not_stored",
         }
-        
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as e:
-        return {"error": f"Failed to parse CSV: {str(e)}"}
+        raise HTTPException(status_code=400, detail=f"Failed to prepare audit dataset: {e}")
 
 
 @router.post("/upload-csv-knowledge")
@@ -69,10 +137,8 @@ async def upload_csv_knowledge(file: UploadFile = File(...)):
     """Upload a CSV file to populate the FAISS knowledge base.
     CSV should have columns: title, content, source (source is optional).
     """
-    content = await file.read()
-    
     try:
-        df = pd.read_csv(io.BytesIO(content))
+        df = await _read_public_csv(file)
         columns = [c.lower().strip() for c in df.columns.tolist()]
         df.columns = columns
         
@@ -109,9 +175,14 @@ async def upload_csv_knowledge(file: UploadFile = File(...)):
             if cursor.fetchone()[0] == 0:
                 cursor.execute(
                     "INSERT INTO knowledge_base (title, content, source) VALUES (?, ?, ?)",
-                    (title, text, source)
+                    (title, text[:2500], source[:300])
                 )
                 inserted += 1
+
+        cursor.execute(
+            "DELETE FROM knowledge_base WHERE id NOT IN (SELECT id FROM knowledge_base ORDER BY id DESC LIMIT ?)",
+            (MAX_KB_ARTICLES,),
+        )
         
         conn.commit()
         
@@ -149,7 +220,11 @@ async def add_knowledge_article(article: KBArticle):
     
     cursor.execute(
         "INSERT INTO knowledge_base (title, content, source) VALUES (?, ?, ?)",
-        (article.title, article.content, article.source)
+        (article.title, article.content[:2500], article.source[:300])
+    )
+    cursor.execute(
+        "DELETE FROM knowledge_base WHERE id NOT IN (SELECT id FROM knowledge_base ORDER BY id DESC LIMIT ?)",
+        (MAX_KB_ARTICLES,),
     )
     conn.commit()
     
@@ -175,9 +250,13 @@ async def add_knowledge_bulk(data: KBBulkUpload):
         if cursor.fetchone()[0] == 0:
             cursor.execute(
                 "INSERT INTO knowledge_base (title, content, source) VALUES (?, ?, ?)",
-                (article.title, article.content, article.source)
+                (article.title, article.content[:2500], article.source[:300])
             )
             inserted += 1
+    cursor.execute(
+        "DELETE FROM knowledge_base WHERE id NOT IN (SELECT id FROM knowledge_base ORDER BY id DESC LIMIT ?)",
+        (MAX_KB_ARTICLES,),
+    )
     
     conn.commit()
     cursor.execute("SELECT COUNT(*) FROM knowledge_base")

@@ -6,7 +6,6 @@ from ..seed_data import SAMPLE_AUDIT
 router = APIRouter()
 
 from ..demo.datasets import DEMO_SCENARIOS
-from .audit import run_audit_endpoint
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -63,11 +62,11 @@ async def run_demo_audit(dataset_key: str):
         {"title": "Hallucinated citation 3", "snippet": "Fake snippet"}
     ]
     
-    if dataset_key == "hiring_bias":
+    if dataset_key == "hiring_bias_demo":
         result["regulatory_flags"] = [{"regulation": "ECOA §1691", "description": "zip_code proxy discrimination", "type": "warning"}]
-    elif dataset_key == "healthcare_hallucination":
+    elif dataset_key == "healthcare_hallucination_demo":
         result["regulatory_flags"] = [{"regulation": "WHO Essential Medicines", "description": "drug dosage hallucinations", "type": "danger"}]
-    elif dataset_key == "lending_fairness":
+    elif dataset_key == "lending_fairness_demo":
         result["regulatory_flags"] = [{"regulation": "EU AI Act Art. 10", "description": "training data quality violations", "type": "primary"}]
     else:
         result["regulatory_flags"] = []
@@ -85,4 +84,3 @@ async def run_demo_audit(dataset_key: str):
     result["input_text"] = scenario["input_data"]
     
     return result
-

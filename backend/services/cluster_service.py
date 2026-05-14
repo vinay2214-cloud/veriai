@@ -10,8 +10,10 @@ def cluster_features(X: np.ndarray, n_clusters: int = 4) -> Tuple[np.ndarray, np
     """Run KMeans on the feature matrix X.
     Returns a tuple (labels, centroids).
     """
-    kmeans = KMeans(n_clusters=n_clusters, random_state=0, n_init='auto')
-    kmeans.fit(X)
+    numeric_df = np.asarray(X, dtype=float)
+    numeric_df = np.nan_to_num(numeric_df, nan=0.0, posinf=0.0, neginf=0.0)
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init='auto')
+    kmeans.fit(numeric_df)
     return kmeans.labels_, kmeans.cluster_centers_
 
 def cluster_bias_analysis(

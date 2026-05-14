@@ -18,8 +18,28 @@ services:
         value: /var/data/veriai.db
       - key: DATASETS_DIR
         value: /var/data/datasets
+      - key: RETENTION_DAYS
+        value: "7"
+      - key: MAX_FILE_SIZE_MB
+        value: "5"
+      - key: MAX_PUBLIC_UPLOAD_MB
+        value: "5"
+      - key: MAX_PUBLIC_UPLOAD_ROWS
+        value: "5000"
+      - key: MAX_AUDIT_RECORDS
+        value: "75"
+      - key: MAX_REVIEW_RECORDS
+        value: "100"
+      - key: MAX_FEEDBACK_RECORDS
+        value: "200"
+      - key: MAX_KB_ARTICLES
+        value: "75"
+      - key: MAX_REPORT_JSON_CHARS
+        value: "18000"
       - key: VERIAI_LOG_LEVEL
         value: INFO
+      - key: ALLOWED_ORIGINS
+        value: https://veriai-eyxl.onrender.com
       - key: VERIAI_CORS_ORIGINS
         value: https://veriai-eyxl.onrender.com,http://localhost:3000,http://127.0.0.1:3000,http://localhost:8000,http://127.0.0.1:8000
       - key: JWT_SECRET

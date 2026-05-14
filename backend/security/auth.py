@@ -125,19 +125,16 @@ async def get_current_user(
         print(f"WARNING: lazy_cleanup failed: {exc}")
 
     is_public = _is_public_route(request.url.path)
-    secret = _jwt_secret()
-    if not secret or jwt is None:
-        if is_public:
-            return None
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Authentication is disabled: JWT stack not configured.",
-        )
-
     if credentials is None or not credentials.credentials:
         if is_public:
             return None
         raise _unauthorized("Missing bearer token")
+
+    secret = _jwt_secret()
+    if not secret or jwt is None:
+        if is_public:
+            return None
+        raise _unauthorized("Authentication is not configured")
 
     try:
         payload = jwt.decode(credentials.credentials, secret, algorithms=[JWT_ALGORITHM])

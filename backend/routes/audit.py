@@ -17,11 +17,39 @@ async def audit(request: AuditRequest):
     # Invalidate truth cache to pick up any new KB entries
     invalidate_cache()
 
+    depth = request.depth or (request.audit_options or {}).get("depth") or "standard"
+    input_text = request.input_text
+
+    if not input_text and request.dataset_id in {"demo_hiring", "hiring_bias_demo"}:
+        from .demo import run_demo_audit
+        return await run_demo_audit("hiring_bias_demo")
+
+    if not input_text and request.features is not None and request.labels is not None:
+        if not isinstance(request.features, list) or not request.features:
+            raise HTTPException(status_code=400, detail="Structured audit requires a non-empty feature matrix.")
+        feature_names = request.feature_names
+        if not feature_names and request.features and isinstance(request.features[0], list):
+            feature_names = [f"f{i}" for i in range(len(request.features[0]))]
+        input_text = json.dumps(
+            {
+                "features": request.features,
+                "labels": request.labels,
+                "feature_names": feature_names,
+                "protected_index": request.protected_index or 0,
+            }
+        )
+
+    if not input_text:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide input_text, a structured dataset with features+labels, or dataset_id='demo_hiring'.",
+        )
+
     try:
         result = await run_audit(
-            input_text=request.input_text,
+            input_text=input_text,
             num_clusters=request.num_clusters,
-            depth=request.depth or "standard",
+            depth=depth,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))

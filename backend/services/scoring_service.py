@@ -1,6 +1,10 @@
-"""Trust‑score calculation.
-Uses the weighted formula defined in backend.config.
-Now reads from get_active_weights() so runtime changes take effect immediately.
+"""Trust-score calculation.
+
+Core formula:
+    Trust = alpha*truth + beta*(1-bias) + gamma*confidence
+
+Cluster and distribution checks remain part of the audit pipeline as
+diagnostics, but they do not change the trust-score formula.
 """
 from typing import Dict
 from ..config import get_active_weights
@@ -17,20 +21,16 @@ def compute_trust_score(
     cluster: float,
     distribution: float,
 ) -> Dict[str, float]:
-    """Calculate the weighted trust score using the weighted_score core ML Addon.
-    Reads weights from get_active_weights() so API-configured weights are respected.
-    """
+    """Calculate the weighted trust score using the fixed 3-signal formula."""
     active_weights = get_active_weights()
     bias_contrib = (1 - bias) 
     
     # Order must match between features and weights arrays
-    features = [truth, bias_contrib, confidence, cluster, distribution]
+    features = [truth, bias_contrib, confidence]
     weights_array = [
         active_weights["truth"], 
         active_weights["bias"], 
         active_weights["confidence"], 
-        active_weights["cluster"], 
-        active_weights["distribution"]
     ]
     
     trust_score = weighted_score(features, weights_array)
@@ -39,8 +39,8 @@ def compute_trust_score(
         "truth": truth * active_weights["truth"],
         "bias": bias_contrib * active_weights["bias"],
         "confidence": confidence * active_weights["confidence"],
-        "cluster": cluster * active_weights["cluster"],
-        "distribution": distribution * active_weights["distribution"],
+        "cluster_diagnostic": cluster,
+        "distribution_diagnostic": distribution,
     }
     
     trust_score = max(0.0, min(1.0, trust_score))

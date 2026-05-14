@@ -11,6 +11,17 @@
 
 ---
 
+## Audit Fix Log — May 14, 2026
+- ✅ Removed stale `run_audit_endpoint` import from `backend/routes/demo.py`; verified backend main import no longer fails on that missing symbol.
+- ✅ Aligned public demo dataset keys with the audit contract (`hiring_bias_demo`, `healthcare_hallucination_demo`, `lending_fairness_demo`) while preserving the 51/38/62 demo metrics.
+- ✅ Added Render storage guardrails: in-memory public CSV parsing, compact persisted audit reports, row pruning, and configurable storage limits.
+- ✅ Fixed CSV upload pipeline compatibility: uploaded datasets are validated, injection-scanned, encoded into numeric features/labels, and returned in `/api/audit`-ready format.
+- ✅ Restored the core 3-factor Trust Score formula and industry presets: truth, fairness, confidence.
+- ✅ Added missing security header `X-Content-Type-Options: nosniff`.
+- ✅ Added `.env.example`, MIT `LICENSE`, and a professional deployment-focused `README.md`.
+
+---
+
 ## Priority 1 — Security Layer (Dataset Upload Protection)
 
 These must be implemented in ORDER. Do not skip or reorder.

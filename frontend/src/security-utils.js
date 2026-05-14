@@ -6,8 +6,7 @@
  * and graceful error handling without heavy auth or enterprise login.
  *
  * DESIGN DECISIONS (preserving VeriAI's public demo nature):
- * - No JWT session management — the demo is open-access
- * - No localStorage for tokens — avoids persistent auth state
+ * - JWTs are memory-only and cleared when the page is closed
  * - File validation is UX sugar only; server enforces real checks
  * - All helpers degrade gracefully when backend is unavailable
  */
@@ -19,6 +18,33 @@ const CONFIG = Object.freeze({
   ALLOWED_MIME_PREFIXES: ['text/', 'application/json', 'application/vnd.openxmlformats-officedocument', 'application/vnd.ms-excel'],
   DANGEROUS_CSV_PREFIXES: ['=', '+', '@', '|', '-', '--'],
 });
+
+let accessToken = null;
+
+export const session = {
+  set(token) {
+    accessToken = token || null;
+  },
+  get() {
+    return accessToken;
+  },
+  clear() {
+    accessToken = null;
+  },
+  isLoggedIn() {
+    return Boolean(accessToken);
+  },
+};
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => session.clear());
+}
+
+export async function authFetch(url, options = {}) {
+  const headers = new Headers(options.headers || {});
+  if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
+  return fetch(url, { ...options, headers });
+}
 
 // ---- File Validation ----
 
@@ -121,6 +147,13 @@ export function sanitizeOutput(value, context = 'html') {
     default:
       return str;
   }
+}
+
+export const escHtml = (value) => sanitizeOutput(value, 'html');
+
+export function safeText(el, value) {
+  if (el) el.textContent = String(value ?? '');
+  return el;
 }
 
 /**
@@ -281,13 +314,28 @@ export async function uploadWithProgress(url, formData, onProgress) {
   });
 }
 
+export async function uploadDataset(file, onProgress) {
+  const validation = validateFileClient(file);
+  if (!validation.valid) {
+    return { data: null, error: validation.error };
+  }
+  const formData = new FormData();
+  formData.append('file', file);
+  return uploadWithProgress('/api/upload-csv', formData, onProgress);
+}
+
 export default {
+  session,
+  authFetch,
   validateFileClient,
   hasDangerousCSVContent,
   formatFileSize,
   sanitizeOutput,
+  escHtml,
+  safeText,
   safePreview,
   showToast,
   safeFetch,
   uploadWithProgress,
+  uploadDataset,
 };

@@ -41,8 +41,12 @@ DB_PATH = _resolve_db_path()
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 
 
-def _split_csv_env(name: str, default: str = "") -> list[str]:
-    raw = os.getenv(name, default)
+def _split_csv_env(name: str, default: str = "", fallback_name: str | None = None) -> list[str]:
+    raw = os.getenv(name, "").strip()
+    if not raw and fallback_name:
+        raw = os.getenv(fallback_name, "").strip()
+    if not raw:
+        raw = default
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
@@ -51,7 +55,26 @@ CORS_ORIGINS = _split_csv_env(
     "http://localhost:3000,http://127.0.0.1:3000,"
     "http://localhost:8000,http://127.0.0.1:8000,"
     "https://veriai-eyxl.onrender.com",
+    fallback_name="ALLOWED_ORIGINS",
 )
+
+# ---------------------------------------------------------------------------
+# Render / demo storage guardrails
+# ---------------------------------------------------------------------------
+# Public uploads are processed in memory only. These limits keep the demo
+# responsive and prevent accidental large-file pressure on Render instances.
+MAX_PUBLIC_UPLOAD_MB = int(os.getenv("MAX_PUBLIC_UPLOAD_MB", os.getenv("MAX_FILE_SIZE_MB", "5")))
+MAX_PUBLIC_UPLOAD_ROWS = int(os.getenv("MAX_PUBLIC_UPLOAD_ROWS", "5000"))
+PUBLIC_UPLOAD_PREVIEW_ROWS = int(os.getenv("PUBLIC_UPLOAD_PREVIEW_ROWS", "5"))
+
+# SQLite pruning keeps the persistent demo database bounded. The values are
+# intentionally small enough for a public jury demo while preserving useful
+# dashboards and report history.
+MAX_AUDIT_RECORDS = int(os.getenv("MAX_AUDIT_RECORDS", "75"))
+MAX_REVIEW_RECORDS = int(os.getenv("MAX_REVIEW_RECORDS", "100"))
+MAX_FEEDBACK_RECORDS = int(os.getenv("MAX_FEEDBACK_RECORDS", "200"))
+MAX_KB_ARTICLES = int(os.getenv("MAX_KB_ARTICLES", "75"))
+MAX_REPORT_JSON_CHARS = int(os.getenv("MAX_REPORT_JSON_CHARS", "18000"))
 
 
 def get_async_database_url() -> str:
@@ -70,13 +93,7 @@ def get_async_database_url() -> str:
 # ---------------------------------------------------------------------------
 # Trust score weighting (must sum to 1.0)
 # ---------------------------------------------------------------------------
-TRUST_WEIGHTS = {
-    "truth": 0.35,
-    "bias": 0.30,          # note: we use (1 - bias_score) in the formula
-    "confidence": 0.15,
-    "cluster": 0.10,
-    "distribution": 0.10,
-}
+TRUST_WEIGHTS = {"truth": 0.40, "bias": 0.40, "confidence": 0.20}
 
 # Mutable runtime weights — API can update these without restarting
 CUSTOM_WEIGHTS: dict = {}
@@ -85,23 +102,23 @@ CUSTOM_WEIGHTS: dict = {}
 INDUSTRY_PRESETS = {
     "general": {
         "label": "General Purpose",
-        "description": "Balanced weights for general AI auditing",
-        "weights": {"truth": 0.35, "bias": 0.30, "confidence": 0.15, "cluster": 0.10, "distribution": 0.10},
+        "description": "Balanced trust scoring for general AI auditing.",
+        "weights": {"truth": 0.40, "bias": 0.40, "confidence": 0.20},
     },
     "healthcare": {
         "label": "Healthcare / Medical",
-        "description": "Heavy truth weighting — medical claims must be factually grounded",
-        "weights": {"truth": 0.45, "bias": 0.25, "confidence": 0.15, "cluster": 0.10, "distribution": 0.05},
+        "description": "Prioritizes factual grounding for medical and clinical claims.",
+        "weights": {"truth": 0.45, "bias": 0.35, "confidence": 0.20},
     },
     "finance": {
         "label": "Finance / Banking",
-        "description": "Bias-heavy — loan and credit scoring must be demographically fair",
-        "weights": {"truth": 0.30, "bias": 0.35, "confidence": 0.15, "cluster": 0.10, "distribution": 0.10},
+        "description": "Balances truth and fairness for lending and credit decisions.",
+        "weights": {"truth": 0.38, "bias": 0.42, "confidence": 0.20},
     },
     "hiring": {
         "label": "HR / Hiring",
-        "description": "Maximum bias sensitivity — hiring decisions must not discriminate",
-        "weights": {"truth": 0.25, "bias": 0.40, "confidence": 0.15, "cluster": 0.10, "distribution": 0.10},
+        "description": "Prioritizes fairness for screening, ranking, and hiring workflows.",
+        "weights": {"truth": 0.35, "bias": 0.45, "confidence": 0.20},
     },
 }
 

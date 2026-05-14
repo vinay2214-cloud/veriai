@@ -2,7 +2,7 @@ import { escapeHtml } from '../utils.js';
 
 export async function renderSettingsPage(rootEl, api) {
     const config = await api.get('/settings/weights');
-    const weights = config?.active_weights || { truth: 0.35, bias: 0.3, confidence: 0.15, cluster: 0.1, distribution: 0.1 };
+    const weights = config?.active_weights || { truth: 0.4, bias: 0.4, confidence: 0.2 };
     const presets = config?.presets || {};
 
     // Fetch knowledge base stats
@@ -17,7 +17,7 @@ export async function renderSettingsPage(rootEl, api) {
             <div style="font-size:0.8rem; color:var(--text-muted);">VeriAI Industry Configuration</div>
             <h2 style="font-size:1.4rem; font-weight:700;">Dynamic Trust Formula Configuration</h2>
             <p style="font-size:0.82rem; color:var(--text-secondary); margin-top:0.3rem;">
-                Adjust how VeriAI calculates the composite Trust Score. The formula: <code style="color:var(--accent-cyan); font-family:var(--font-mono);">Trust = Σ(wᵢ × scoreᵢ)</code> where weights must sum to 1.0.
+                Adjust how VeriAI calculates the composite Trust Score. The formula: <code style="color:var(--accent-cyan); font-family:var(--font-mono);">Trust = α×Truth + β×(1-Bias) + γ×Confidence</code>.
             </p>
         </div>
 
@@ -38,8 +38,6 @@ export async function renderSettingsPage(rootEl, api) {
                     ${buildSlider('truth', 'Truth Verification Weight', weights.truth, 'Weight given to factual accuracy and hallucination detection. Higher values penalize hallucinated or unverified claims.')}
                     ${buildSlider('bias', 'Bias Detection Weight', weights.bias, 'Controls importance of fairness and non-discrimination metrics. Critical for HR and lending applications.')}
                     ${buildSlider('confidence', 'Model Confidence Weight', weights.confidence, 'Weight of the model\'s own prediction confidence in the final trust score.')}
-                    ${buildSlider('cluster', 'Clustering Anomaly Weight', weights.cluster, 'Focus on identifying anomalous data clusters that may indicate data poisoning or distribution shift.')}
-                    ${buildSlider('distribution', 'Distribution Shift Weight', weights.distribution, 'Impact of data representativeness on trust score. Detects training/serving skew.')}
                 </div>
 
                 <div style="margin-top:1.5rem; padding:1rem; background:rgba(255,255,255,0.03); border-radius:var(--radius-md); border:1px solid rgba(255,255,255,0.08);">
@@ -70,7 +68,7 @@ export async function renderSettingsPage(rootEl, api) {
                 <div class="card glass-card">
                     <h4 style="font-size:0.9rem; margin-bottom:0.5rem;">📐 Trust Formula</h4>
                     <div style="font-family:var(--font-mono); font-size:0.72rem; color:var(--accent-cyan); line-height:1.8; padding:0.5rem; background:rgba(0,0,0,0.2); border-radius:4px;" id="formula-display">
-                        Trust = ${(weights.truth).toFixed(2)}×Truth + ${(weights.bias).toFixed(2)}×Bias + ${(weights.confidence).toFixed(2)}×Conf + ${(weights.cluster).toFixed(2)}×Clust + ${(weights.distribution).toFixed(2)}×Dist
+                        Trust = ${(weights.truth).toFixed(2)}×Truth + ${(weights.bias).toFixed(2)}×(1-Bias) + ${(weights.confidence).toFixed(2)}×Confidence
                     </div>
                 </div>
 
@@ -78,7 +76,7 @@ export async function renderSettingsPage(rootEl, api) {
                 <div class="card glass-card">
                     <h4 style="font-size:0.9rem; margin-bottom:0.5rem;">📚 Knowledge Base Management</h4>
                     <p style="font-size:0.72rem; color:var(--text-muted); margin-bottom:0.75rem;">
-                        Upload training data (CSV) for bias scanning, or add knowledge articles to the FAISS vector store for truth/hallucination verification.
+                        Upload CSV data for an in-memory bias scan, or add compact knowledge articles for truth verification. Raw datasets are not stored.
                     </p>
 
                     <!-- Hidden file inputs -->
@@ -271,13 +269,13 @@ export async function renderSettingsPage(rootEl, api) {
         document.getElementById('weight-sum').textContent = sum + '%';
         document.getElementById('weight-sum').style.color = Math.abs(sum - 100) < 5 ? 'var(--accent-emerald)' : 'var(--accent-red)';
         
-        const simScore = Math.round(vals.truth * 0.7 + vals.bias * 0.85 + vals.confidence * 0.9 + vals.cluster * 0.6 + vals.distribution * 0.75);
+        const simScore = Math.round(vals.truth * 0.74 + vals.bias * 0.88 + vals.confidence * 0.9);
         const clampedScore = Math.min(Math.max(simScore, 10), 99);
         document.getElementById('sim-score').textContent = clampedScore + '%';
         document.getElementById('score-ring').setAttribute('stroke-dasharray', clampedScore + ', 100');
 
         document.getElementById('formula-display').textContent = 
-            'Trust = ' + (vals.truth/100).toFixed(2) + '×Truth + ' + (vals.bias/100).toFixed(2) + '×Bias + ' + (vals.confidence/100).toFixed(2) + '×Conf + ' + (vals.cluster/100).toFixed(2) + '×Clust + ' + (vals.distribution/100).toFixed(2) + '×Dist';
+            'Trust = ' + (vals.truth/100).toFixed(2) + '×Truth + ' + (vals.bias/100).toFixed(2) + '×(1-Bias) + ' + (vals.confidence/100).toFixed(2) + '×Confidence';
     };
 
     document.querySelectorAll('.weight-slider').forEach(s => {
@@ -293,7 +291,7 @@ export async function renderSettingsPage(rootEl, api) {
             if (preset === 'reset') {
                 const res = await api.post('/settings/weights/reset');
                 if (res) {
-                    const defaults = config?.defaults || { truth: 0.35, bias: 0.3, confidence: 0.15, cluster: 0.1, distribution: 0.1 };
+                    const defaults = config?.defaults || { truth: 0.4, bias: 0.4, confidence: 0.2 };
                     applyWeights(defaults);
                     descEl.textContent = '⟳ Reset to default weights.';
                     descEl.style.display = 'block';

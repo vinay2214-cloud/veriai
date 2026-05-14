@@ -15,8 +15,6 @@ class WeightsUpdate(BaseModel):
     truth: float = Field(..., ge=0.0, le=1.0)
     bias: float = Field(..., ge=0.0, le=1.0)
     confidence: float = Field(..., ge=0.0, le=1.0)
-    cluster: float = Field(..., ge=0.0, le=1.0)
-    distribution: float = Field(..., ge=0.0, le=1.0)
 
 
 class PresetRequest(BaseModel):

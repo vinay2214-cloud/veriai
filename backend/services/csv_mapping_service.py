@@ -7,7 +7,6 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 from pandas.api.types import is_numeric_dtype
-from sklearn.preprocessing import LabelEncoder
 
 VALID_ROLES = {"target", "protected_attribute", "feature", "ignore"}
 
@@ -100,9 +99,8 @@ def normalize_mapping(mapping: Dict[str, Any], columns: List[str]) -> Dict[str, 
 
 def _encode_binary(series: pd.Series) -> Tuple[np.ndarray, List[str]]:
     clean = _clean_series(series).fillna("missing")
-    encoder = LabelEncoder()
-    encoded = encoder.fit_transform(clean)
-    classes = [str(c) for c in encoder.classes_.tolist()]
+    encoded, uniques = pd.factorize(clean.astype(str), sort=True)
+    classes = [str(c) for c in uniques.tolist()]
     return encoded.astype(float), classes
 
 
@@ -168,6 +166,7 @@ def build_mapped_dataset(df: pd.DataFrame, mapping: Dict[str, Any]) -> Tuple[Dic
             encoded_feature_names.extend(dummies.columns.tolist())
 
     X_df = pd.concat(X_frames, axis=1)
+    X_df = X_df.replace([np.inf, -np.inf], 0).fillna(0)
 
     y_encoded, target_classes = _encode_binary(df[target_col])
     if len(target_classes) != 2:

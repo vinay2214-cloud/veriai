@@ -130,12 +130,12 @@ def feature_importance(X: np.ndarray, y: np.ndarray, feature_names: List[str]) -
     model = LogisticRegression(max_iter=200, solver="liblinear")
     model.fit(X, y)
     result = permutation_importance(model, X, y, n_repeats=5, random_state=0)
-    importances = result.importances_mean
-    total = importances.sum()
-    if total == 0:
+    importances = np.abs(result.importances_mean)
+    total_variance = importances.sum()
+    if total_variance < 1e-6:
         normalized = np.zeros_like(importances)
     else:
-        normalized = importances / total
+        normalized = importances / total_variance
     return {name: float(val) for name, val in zip(feature_names, normalized)}
 
 def compute_bias_score(

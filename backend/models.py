@@ -14,10 +14,17 @@ class AuditRequest(BaseModel):
     """Payload for a full audit.
     `input_text` can be raw text, a JSON‑encoded dataset, or model output.
     """
-    input_text: str = Field(..., description="Raw text or JSON string to audit")
+    input_text: Optional[str] = Field(None, description="Raw text or JSON string to audit")
+    dataset_id: Optional[str] = Field(None, description="Optional demo/private dataset identifier")
+    features: Optional[Any] = Field(None, description="Optional numeric feature matrix or feature names")
+    labels: Optional[List[Any]] = Field(None, description="Optional numeric/binary labels for structured dataset audit")
+    feature_names: Optional[List[str]] = Field(None, description="Optional names for structured dataset features")
+    protected_index: Optional[int] = Field(0, description="Protected feature index for structured dataset audit")
+    target_column: Optional[str] = Field(None, description="Optional target column name from UI/API clients")
     protected_attributes: Optional[List[str]] = Field(
         None, description="Names of protected attributes for bias analysis"
     )
+    audit_options: Optional[Dict[str, Any]] = Field(None, description="Optional client audit settings")
     num_clusters: Optional[int] = Field(4, description="KMeans clusters for analysis")
     depth: Optional[str] = Field("standard", description="Audit depth: 'fast', 'standard', or 'thorough'")
 

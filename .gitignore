@@ -20,9 +20,19 @@ env/
 
 # Logs
 *.log
+logs/
+*.jsonl
 
 # Database
 *.db
+*.db-*
+*.sqlite
+*.sqlite3
 
 # FAISS index (optional)
 *.index
+
+# Runtime uploads / generated datasets
+datasets/
+data/datasets/
+backend/security_datasets/

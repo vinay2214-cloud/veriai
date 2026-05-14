@@ -6,7 +6,15 @@ The design abstracts the DB so swapping to Firestore later is straightforward.
 import aiosqlite
 import json
 from pathlib import Path
-from .config import DB_PATH, LOG_LEVEL
+from .config import (
+    DB_PATH,
+    LOG_LEVEL,
+    MAX_AUDIT_RECORDS,
+    MAX_FEEDBACK_RECORDS,
+    MAX_KB_ARTICLES,
+    MAX_REPORT_JSON_CHARS,
+    MAX_REVIEW_RECORDS,
+)
 import logging
 
 logging.basicConfig(level=LOG_LEVEL)
@@ -120,17 +128,104 @@ async def fetch_all(query: str, params: tuple = ()):
             rows = await cursor.fetchall()
             return rows
 
+
+def _truncate(value, max_chars: int):
+    if value is None:
+        return value
+    text = str(value)
+    return text if len(text) <= max_chars else text[:max_chars] + "..."
+
+
+def _compact_report_json(report_json):
+    """Keep persisted reports useful but bounded for Render storage."""
+    if report_json is None:
+        return None
+    try:
+        report = json.loads(json.dumps(report_json, default=str))
+    except Exception:
+        report = {"summary": _truncate(report_json, 1000)}
+
+    if isinstance(report, dict):
+        report["input_text"] = _truncate(report.get("input_text", ""), 500)
+        report["corrections"] = _truncate(report.get("corrections", ""), 1200)
+
+        truth = report.get("truth")
+        if isinstance(truth, dict):
+            citations = truth.get("citations") or []
+            truth["citations"] = [
+                {
+                    **citation,
+                    "snippet": _truncate(citation.get("snippet", ""), 220),
+                    "source_text": _truncate(citation.get("source_text", ""), 220),
+                }
+                for citation in citations[:5]
+                if isinstance(citation, dict)
+            ]
+
+            compact_claims = []
+            for claim in (truth.get("claim_citations") or [])[:5]:
+                if not isinstance(claim, dict):
+                    continue
+                item = dict(claim)
+                item.pop("retrieved_context", None)
+                item["source_text"] = _truncate(item.get("source_text", ""), 220)
+                compact_claims.append(item)
+            truth["claim_citations"] = compact_claims
+
+        report["storage_policy"] = "compact_report_json_raw_uploads_not_stored"
+
+    payload = json.dumps(report, separators=(",", ":"))
+    if len(payload) > MAX_REPORT_JSON_CHARS:
+        minimal = {
+            "audit_id": report.get("audit_id") if isinstance(report, dict) else None,
+            "audit_type": report.get("audit_type") if isinstance(report, dict) else None,
+            "trust_score": report.get("trust_score") if isinstance(report, dict) else None,
+            "bias": report.get("bias") if isinstance(report, dict) else None,
+            "truth": report.get("truth") if isinstance(report, dict) else None,
+            "cluster": report.get("cluster") if isinstance(report, dict) else None,
+            "distribution": report.get("distribution") if isinstance(report, dict) else None,
+            "reasoning_steps": report.get("reasoning_steps") if isinstance(report, dict) else None,
+            "storage_policy": "minimal_report_json_size_cap_applied",
+        }
+        payload = json.dumps(minimal, separators=(",", ":"))
+    return payload
+
+
+async def prune_storage() -> None:
+    """Bound demo SQLite growth for storage-limited Render deployments."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "DELETE FROM audits WHERE id NOT IN (SELECT id FROM audits ORDER BY created_at DESC LIMIT ?)",
+            (MAX_AUDIT_RECORDS,),
+        )
+        await db.execute(
+            "DELETE FROM review_queue WHERE id NOT IN (SELECT id FROM review_queue ORDER BY id DESC LIMIT ?)",
+            (MAX_REVIEW_RECORDS,),
+        )
+        await db.execute(
+            "DELETE FROM feedback WHERE id NOT IN (SELECT id FROM feedback ORDER BY id DESC LIMIT ?)",
+            (MAX_FEEDBACK_RECORDS,),
+        )
+        await db.execute(
+            "DELETE FROM knowledge_base WHERE id NOT IN (SELECT id FROM knowledge_base ORDER BY id DESC LIMIT ?)",
+            (MAX_KB_ARTICLES,),
+        )
+        await db.execute("PRAGMA optimize;")
+        await db.commit()
+
+
 # Convenience wrappers for audit table
 async def insert_audit(audit_id: str, input_text: str, bias_score: float = None,
                        truth_score: float = None, trust_score: float = None,
                        corrected: str = None, audit_type: str = "dataset",
                        model_name: str = None, prompt: str = None, report_json=None,
                        column_mapping: str = None) -> None:
-    report_payload = json.dumps(report_json) if report_json is not None else None
+    report_payload = _compact_report_json(report_json)
     await execute(
         "INSERT OR REPLACE INTO audits (id, input, bias_score, truth_score, trust_score, corrected, audit_type, model_name, prompt, report_json, column_mapping) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (audit_id, input_text, bias_score, truth_score, trust_score, corrected, audit_type, model_name, prompt, report_payload, column_mapping),
+        (audit_id, _truncate(input_text, 500), bias_score, truth_score, trust_score, _truncate(corrected, 1200), audit_type, model_name, _truncate(prompt, 500), report_payload, column_mapping),
     )
+    await prune_storage()
 
 async def get_audit(audit_id: str):
     row = await fetch_one(

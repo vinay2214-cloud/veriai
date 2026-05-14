@@ -27,6 +27,7 @@ ALLOWED_MIME_TYPES = {
 }
 
 ALLOWED_EXTENSIONS = {".csv"}
+INJECTION_PATTERNS = ("=CMD(", "=SYSTEM(", "<script")
 
 
 def _is_dangerous_text(value: str) -> bool:
@@ -36,7 +37,7 @@ def _is_dangerous_text(value: str) -> bool:
     if text.startswith(("=", "+", "@", "|")):
         return True
     lowered = text.lower()
-    return lowered.startswith("<script") or lowered.startswith("=cmd(")
+    return any(lowered.startswith(pattern.lower()) for pattern in INJECTION_PATTERNS)
 
 
 async def validate_upload(file: UploadFile) -> Dict[str, Any]:
@@ -65,12 +66,16 @@ async def validate_upload(file: UploadFile) -> Dict[str, Any]:
     if size == 0:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
-    if magic is None:
-        raise HTTPException(status_code=503, detail="MIME detector unavailable on server.")
-
-    detected_mime = magic.from_buffer(bytes(sniff), mime=True) if sniff else "application/octet-stream"
     extension = Path(file.filename or "").suffix.lower()
-    if detected_mime not in ALLOWED_MIME_TYPES and extension not in ALLOWED_EXTENSIONS:
+    detected_mime = magic.from_buffer(bytes(sniff), mime=True) if magic and sniff else "application/octet-stream"
+
+    if magic is None and extension not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type: MIME detector unavailable and extension={extension or 'none'} is not allowed.",
+        )
+
+    if magic is not None and detected_mime not in ALLOWED_MIME_TYPES and extension not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
             detail=f"Unsupported file type: mime={detected_mime}, extension={extension or 'none'}",
