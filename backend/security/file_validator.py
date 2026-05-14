@@ -5,9 +5,13 @@ import hashlib
 from pathlib import Path
 from typing import Any, Dict, List
 
-import magic  # provided by python-magic-bin
 import pandas as pd
 from fastapi import HTTPException, UploadFile
+
+try:
+    import magic  # provided by python-magic-bin
+except Exception:  # pragma: no cover
+    magic = None
 
 MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024  # 50MB
 _CHUNK_SIZE = 1024 * 1024  # 1MB
@@ -60,6 +64,9 @@ async def validate_upload(file: UploadFile) -> Dict[str, Any]:
 
     if size == 0:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    if magic is None:
+        raise HTTPException(status_code=503, detail="MIME detector unavailable on server.")
 
     detected_mime = magic.from_buffer(bytes(sniff), mime=True) if sniff else "application/octet-stream"
     extension = Path(file.filename or "").suffix.lower()
@@ -128,4 +135,3 @@ def sanitize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
         safe_df[col_name] = safe_df[col_name].map(_sanitize)
     return safe_df
-

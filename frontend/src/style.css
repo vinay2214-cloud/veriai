@@ -670,11 +670,21 @@ tr:hover td { background: rgba(167, 139, 250, 0.04); }
 
 /* === RESPONSIVE === */
 @media (max-width: 768px) {
-  .sidebar { display: none; }
-  .main-content { margin-left: 0; }
-  .content-area { padding: 1rem; }
-  .stats-grid { grid-template-columns: 1fr 1fr; }
+  .sidebar { 
+    transform: translateX(-100%);
+    transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .sidebar.open { transform: translateX(0); }
+  .main-content { margin-left: 0; width: 100%; overflow-x: hidden; }
+  .content-area { padding: 1rem; width: 100%; overflow-x: hidden; }
+  .stats-grid { grid-template-columns: 1fr; }
   .pipeline { flex-wrap: wrap; }
+  
+  /* Dashboard specific grid overrides for mobile */
+  .dv-top-row, .dv-mid-row, .dv-bot-row { grid-template-columns: 1fr; }
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .dv-trust-gauge-wrap { transform: scale(0.9); }
+  .dv-table { display: block; overflow-x: auto; white-space: nowrap; }
 }
 
 /* === ACTION BUTTONS (Phase 8 Hackathon Controls) === */

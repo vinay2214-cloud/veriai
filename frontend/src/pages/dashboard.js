@@ -54,7 +54,7 @@ export async function renderDashboard(rootEl, api) {
                 <div class="dv-trust-gauge-wrap">
                     <canvas id="trustChart" width="280" height="170"></canvas>
                     <div class="dv-trust-center">
-                        <div class="dv-trust-pct">${trustPct}%</div>
+                        <div class="dv-trust-pct" id="trust-pct-display">0%</div>
                         <div class="dv-trust-label">TRUST SCORE</div>
                         <span class="dv-trust-level ${trustLevelClass}">${trustLevel}</span>
                     </div>
@@ -323,6 +323,24 @@ function initCharts(stats, bias, fairness, drift, recent) {
         else if (score >= 0.5) { g.addColorStop(0, '#d97706'); g.addColorStop(1, '#f59e0b'); }
         else { g.addColorStop(0, '#dc2626'); g.addColorStop(1, '#ef4444'); }
         new Chart(tCtx, { type:'doughnut', data:{ datasets:[{ data:[score*100,(1-score)*100], backgroundColor:[g,'rgba(255,255,255,0.05)'], borderWidth:0, borderRadius:[10,0] }] }, options:{ cutout:'75%', rotation:-90, circumference:180, plugins:{legend:{display:false},tooltip:{enabled:false}}, layout:{padding:10}, responsive:false } });
+        
+        // Animated counter
+        const displayEl = document.getElementById('trust-pct-display');
+        if (displayEl) {
+            const end = Math.round(score * 100);
+            const duration = 1500;
+            const startTime = performance.now();
+            function updateCounter(currentTime) {
+                const elapsed = currentTime - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const easeOut = 1 - Math.pow(1 - progress, 3); // easeOutCubic
+                const currentVal = Math.floor(easeOut * end);
+                displayEl.textContent = currentVal + '%';
+                if (progress < 1) requestAnimationFrame(updateCounter);
+                else displayEl.textContent = end + '%';
+            }
+            requestAnimationFrame(updateCounter);
+        }
     }
 
     // Drift Area Chart

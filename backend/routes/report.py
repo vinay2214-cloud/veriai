@@ -7,7 +7,10 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.lib import colors
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from .. import database as db
 
 router = APIRouter()
@@ -48,40 +51,6 @@ async def get_report(audit_id: str):
     return base
 
 
-def _pdf_lines(payload: dict):
-    lines = [
-        f"VeriAI Compliance Report",
-        f"Audit ID: {payload.get('audit_id')}",
-        f"Generated: {datetime.utcnow().isoformat()}Z",
-        f"Trust Score: {payload.get('trust_score')}",
-        f"Truth Score: {payload.get('truth_score')}",
-        f"Bias Score: {payload.get('bias_score')}",
-        "",
-        "Input:",
-        str(payload.get("input", ""))[:300],
-        "",
-        "Corrected Output:",
-        str(payload.get("corrected", ""))[:300],
-    ]
-    report = payload.get("report") or {}
-    if report.get("reasoning_steps"):
-        lines.extend(["", "Reasoning Steps:"])
-        for step in report["reasoning_steps"][:10]:
-            lines.append(f"- Step {step.get('step')}: {step.get('name')} | {step.get('status')}")
-    citations = (report.get("truth") or {}).get("citations", [])
-    if citations:
-        lines.extend(["", "Citations:"])
-        for c in citations[:10]:
-            lines.append(f"- {c.get('title')} ({c.get('source')})")
-    review = payload.get("review")
-    if review:
-        lines.extend(["", "Reviewer Trail:"])
-        lines.append(f"- Status: {review.get('status')}")
-        lines.append(f"- Notes: {review.get('reviewer_notes')}")
-        lines.append(f"- Reviewed at: {review.get('reviewed_at')}")
-    return lines
-
-
 @router.get("/reports/{audit_id}/export")
 async def export_report(audit_id: str, format: str = Query("json", pattern="^(json|pdf)$")):
     payload = await get_report(audit_id)
@@ -89,15 +58,96 @@ async def export_report(audit_id: str, format: str = Query("json", pattern="^(js
         return JSONResponse(payload)
 
     buf = io.BytesIO()
-    pdf = canvas.Canvas(buf, pagesize=letter)
-    y = 760
-    for line in _pdf_lines(payload):
-        pdf.drawString(40, y, str(line)[:110])
-        y -= 16
-        if y < 40:
-            pdf.showPage()
-            y = 760
-    pdf.save()
+    doc = SimpleDocTemplate(buf, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
+    styles = getSampleStyleSheet()
+    
+    # Custom Styles
+    title_style = ParagraphStyle(name='TitleStyle', parent=styles['Heading1'], fontSize=20, textColor=colors.HexColor('#3b82f6'), spaceAfter=20)
+    h2_style = ParagraphStyle(name='H2', parent=styles['Heading2'], fontSize=14, textColor=colors.HexColor('#1f2937'), spaceAfter=10, spaceBefore=15)
+    normal_style = styles['Normal']
+    
+    story = []
+    
+    # Title
+    story.append(Paragraph(f"VeriAI Trust Audit Report", title_style))
+    story.append(Paragraph(f"<b>Audit ID:</b> {payload.get('audit_id')}", normal_style))
+    story.append(Paragraph(f"<b>Generated Date:</b> {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC", normal_style))
+    story.append(Spacer(1, 0.2*inch))
+    
+    # Scores Table
+    trust = (payload.get('trust_score') or 0) * 100
+    truth = (payload.get('truth_score') or 0) * 100
+    bias = (payload.get('bias_score') or 0) * 100
+    
+    score_data = [
+        ["Trust Score", "Truth Score", "Bias Score"],
+        [f"{trust:.1f}%", f"{truth:.1f}%", f"{bias:.1f}%"]
+    ]
+    t_style = TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#f3f4f6')),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.HexColor('#374151')),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0,0), (-1,0), 10),
+        ('TOPPADDING', (0,0), (-1,0), 10),
+        ('FONTSIZE', (0,1), (-1,1), 16),
+        ('TEXTCOLOR', (0,1), (0,1), colors.HexColor('#10b981') if trust >= 70 else colors.HexColor('#ef4444')),
+        ('GRID', (0,0), (-1,-1), 1, colors.HexColor('#e5e7eb')),
+    ])
+    score_table = Table(score_data, colWidths=[2*inch, 2*inch, 2*inch])
+    score_table.setStyle(t_style)
+    story.append(score_table)
+    story.append(Spacer(1, 0.3*inch))
+    
+    # Input/Output
+    story.append(Paragraph("Audit Details", h2_style))
+    input_text = str(payload.get("input", ""))[:500] + ("..." if len(str(payload.get("input", ""))) > 500 else "")
+    story.append(Paragraph(f"<b>Original Input:</b><br/>{input_text}", normal_style))
+    story.append(Spacer(1, 0.1*inch))
+    
+    corrected_text = str(payload.get("corrected", ""))[:500] + ("..." if len(str(payload.get("corrected", ""))) > 500 else "")
+    story.append(Paragraph(f"<b>Corrected Output (Auto-Mitigated):</b><br/>{corrected_text}", normal_style))
+    
+    report = payload.get("report") or {}
+    
+    # Correction Log
+    corrections = report.get("corrections")
+    if corrections:
+        story.append(Paragraph("Correction Log", h2_style))
+        story.append(Paragraph(f"<i>{corrections}</i>", normal_style))
+        
+    # Citations
+    citations = (report.get("truth") or {}).get("citations", [])
+    if citations:
+        story.append(Paragraph("Truth Citations (RAG)", h2_style))
+        for i, c in enumerate(citations[:5]):
+            story.append(Paragraph(f"<b>[{i+1}] {c.get('title', 'Unknown Source')}</b>", normal_style))
+            story.append(Paragraph(f"Source: <i>{c.get('source', 'N/A')}</i> | Similarity: {c.get('similarity', 0)*100:.1f}%", normal_style))
+            snippet = c.get('snippet', '')
+            story.append(Paragraph(f"\"{snippet}\"", normal_style))
+            story.append(Spacer(1, 0.1*inch))
+
+    # Pipeline Reasoning
+    reasoning = report.get("reasoning_steps")
+    if reasoning:
+        story.append(Paragraph("8-Step Reasoning Pipeline", h2_style))
+        for step in reasoning:
+            status_color = "#10b981" if step.get('status') == 'complete' else "#ef4444"
+            story.append(Paragraph(
+                f"<b>Step {step.get('step')}: {step.get('name')}</b> <font color='{status_color}'>[{step.get('status').upper()}]</font>", 
+                normal_style
+            ))
+            story.append(Paragraph(f"Detail: {step.get('detail')}", normal_style))
+            story.append(Spacer(1, 0.05*inch))
+            
+    review = payload.get("review")
+    if review:
+        story.append(Paragraph("Human Review Trail", h2_style))
+        story.append(Paragraph(f"<b>Status:</b> {review.get('status').upper()}", normal_style))
+        story.append(Paragraph(f"<b>Notes:</b> {review.get('reviewer_notes')}", normal_style))
+        story.append(Paragraph(f"<b>Date:</b> {review.get('reviewed_at')}", normal_style))
+        
+    doc.build(story)
     buf.seek(0)
     return StreamingResponse(
         buf,

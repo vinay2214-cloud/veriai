@@ -7,11 +7,20 @@ from typing import Any, Dict, Optional
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
-from passlib.context import CryptContext
 from .retention import lazy_cleanup
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+try:
+    from jose import JWTError, jwt
+except Exception:  # pragma: no cover
+    JWTError = Exception  # type: ignore[assignment]
+    jwt = None  # type: ignore[assignment]
+
+try:
+    from passlib.context import CryptContext
+except Exception:  # pragma: no cover
+    CryptContext = None  # type: ignore[assignment]
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto") if CryptContext else None
 bearer_scheme = HTTPBearer(auto_error=False)
 
 JWT_ALGORITHM = "HS256"
@@ -48,19 +57,29 @@ def _is_public_route(path: str) -> bool:
 
 
 def hash_password(password: str) -> str:
+    if not pwd_context:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication is disabled: passlib not installed.",
+        )
     return pwd_context.hash(password)
 
 
 def verify_password(password: str, password_hash: str) -> bool:
+    if not pwd_context:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication is disabled: passlib not installed.",
+        )
     return pwd_context.verify(password, password_hash)
 
 
 def _make_token(payload: Dict[str, Any], expires_delta: timedelta, token_type: str) -> str:
     secret = _jwt_secret()
-    if not secret:
+    if not secret or jwt is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Authentication is disabled: JWT_SECRET not configured.",
+            detail="Authentication is disabled: JWT stack not configured.",
         )
     now = datetime.now(timezone.utc)
     body = dict(payload)
@@ -107,12 +126,12 @@ async def get_current_user(
 
     is_public = _is_public_route(request.url.path)
     secret = _jwt_secret()
-    if not secret:
+    if not secret or jwt is None:
         if is_public:
             return None
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Authentication is disabled: JWT_SECRET not configured.",
+            detail="Authentication is disabled: JWT stack not configured.",
         )
 
     if credentials is None or not credentials.credentials:

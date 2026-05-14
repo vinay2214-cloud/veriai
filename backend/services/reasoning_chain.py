@@ -87,12 +87,12 @@ def _cache_key(input_text: str, num_clusters: int, depth: str) -> str:
 
 async def run_audit(input_text: str, num_clusters: int = None, depth: str = "standard") -> Dict[str, Any]:
     """Execute the full multi‑step reasoning chain with parallel processing.
-    
+
     Depth levels:
     - "fast": Bias + Truth only (2 parallel checks)
     - "standard": Bias + Truth + Cluster + Distribution (4 parallel checks)
     - "thorough": All 4 + full re-evaluation pass
-    
+
     Returns a comprehensive result dict ready to be serialised.
     """
     n_clusters = num_clusters or DEFAULT_NUM_CLUSTERS
@@ -236,14 +236,14 @@ async def run_audit(input_text: str, num_clusters: int = None, depth: str = "sta
         })
     else:
         steps.append({
-        "step": 3, "name": "Cluster Analysis",
-        "status": "complete",
-        "detail": (
-            "Not applicable for plain-text input; neutral default used."
-            if text_mode else f"Cluster fairness={cluster_fairness:.3f} across {n_clusters} clusters"
-        ),
-        "elapsed": step_timings.get("cluster", 0),
-    })
+            "step": 3, "name": "Cluster Analysis",
+            "status": "complete",
+            "detail": (
+                "Not applicable for plain-text input; neutral default used."
+                if text_mode else f"Cluster fairness={cluster_fairness:.3f} across {n_clusters} clusters"
+            ),
+            "elapsed": step_timings.get("cluster", 0),
+        })
 
     # ------------------------------------------------------------------
     # Step 4: Distribution analysis
@@ -257,18 +257,19 @@ async def run_audit(input_text: str, num_clusters: int = None, depth: str = "sta
         })
     else:
         steps.append({
-        "step": 4, "name": "Distribution Analysis",
-        "status": "complete",
-        "detail": (
-            "Not applicable for plain-text input; neutral default used."
-            if text_mode else f"Stability={dist_stability:.3f}, skew={dist_stats['skewness']:.3f}"
-        ),
-        "elapsed": step_timings.get("distribution", 0),
-    })
+            "step": 4, "name": "Distribution Analysis",
+            "status": "complete",
+            "detail": (
+                "Not applicable for plain-text input; neutral default used."
+                if text_mode else f"Stability={dist_stability:.3f}, skew={dist_stats['skewness']:.3f}"
+            ),
+            "elapsed": step_timings.get("distribution", 0),
+        })
 
     # ------------------------------------------------------------------
     # Step 5: Compute trust score
     # ------------------------------------------------------------------
+    _t = time.perf_counter()
     confidence = 0.85  # placeholder confidence from model calibration
     score_breakdown = compute_trust_score(
         truth=truth_result["truth_score"],
@@ -277,16 +278,19 @@ async def run_audit(input_text: str, num_clusters: int = None, depth: str = "sta
         cluster=cluster_fairness,
         distribution=dist_stability,
     )
+    step_timings["step_5"] = round((time.perf_counter() - _t) * 1000, 2)
+    logger.info("Step 5 Trust Scoring: %.2fms", step_timings["step_5"])
     steps.append({
         "step": 5, "name": "Trust Score",
         "status": "complete",
         "detail": f"Trust score={score_breakdown['trust_score']:.3f}",
-        "elapsed": 0,
+        "elapsed": step_timings["step_5"],
     })
 
     # ------------------------------------------------------------------
     # Step 6: Decide & correct
     # ------------------------------------------------------------------
+    _t = time.perf_counter()
     raw_result = {
         "input_text": input_text,
         "bias": {"feature_importance": feat_imp},
@@ -296,16 +300,19 @@ async def run_audit(input_text: str, num_clusters: int = None, depth: str = "sta
     corrected_output = corrections.get("truth_corrections", input_text)
 
     decision = "approve" if score_breakdown["trust_score"] >= 0.70 else "correct"
+    step_timings["step_6"] = round((time.perf_counter() - _t) * 1000, 2)
+    logger.info("Step 6 Decision & Correction: %.2fms", step_timings["step_6"])
     steps.append({
         "step": 6, "name": "Decision & Correction",
         "status": "complete",
         "detail": f"Decision: {decision}. Actions: {len(corrections.get('actions', []))}",
-        "elapsed": 0,
+        "elapsed": step_timings["step_6"],
     })
 
     # ------------------------------------------------------------------
     # Step 7: Re‑evaluate after correction
     # ------------------------------------------------------------------
+    _t = time.perf_counter()
     if decision == "correct" and depth != "fast":
         # Re‑run truth check on corrected output
         truth_recheck = await verify_claims(corrected_output)
@@ -316,39 +323,48 @@ async def run_audit(input_text: str, num_clusters: int = None, depth: str = "sta
             cluster=cluster_fairness,
             distribution=dist_stability,
         )
+        final_trust = new_score["trust_score"]
+        step_timings["step_7"] = round((time.perf_counter() - _t) * 1000, 2)
+        logger.info("Step 7 Re-evaluation: %.2fms", step_timings["step_7"])
         steps.append({
             "step": 7, "name": "Re‑evaluation",
             "status": "complete",
             "detail": f"New trust score={new_score['trust_score']:.3f} (was {score_breakdown['trust_score']:.3f})",
-            "elapsed": 0,
+            "elapsed": step_timings["step_7"],
         })
-        final_trust = new_score["trust_score"]
     else:
+        final_trust = score_breakdown["trust_score"]
+        step_timings["step_7"] = round((time.perf_counter() - _t) * 1000, 2)
+        logger.info("Step 7 Re-evaluation: %.2fms", step_timings["step_7"])
         steps.append({
             "step": 7, "name": "Re‑evaluation",
             "status": "skipped" if depth == "fast" else "skipped",
             "detail": "Skipped in fast mode." if depth == "fast" else "No correction needed — approved as‑is.",
-            "elapsed": 0,
+            "elapsed": step_timings["step_7"],
         })
-        final_trust = score_breakdown["trust_score"]
 
     # ------------------------------------------------------------------
     # Step 8: Human review flag (Enhancement #5)
     # ------------------------------------------------------------------
+    _t = time.perf_counter()
     requires_review = bool(final_trust < HUMAN_REVIEW_THRESHOLD)
     if requires_review:
+        step_timings["step_8"] = round((time.perf_counter() - _t) * 1000, 2)
+        logger.info("Step 8 Human Review Routing: %.2fms", step_timings["step_8"])
         steps.append({
             "step": 8, "name": "Human Review Required",
             "status": "flagged",
             "detail": f"Trust score {final_trust:.3f} is below threshold {HUMAN_REVIEW_THRESHOLD}. Queued for human review.",
-            "elapsed": 0,
+            "elapsed": step_timings["step_8"],
         })
     else:
+        step_timings["step_8"] = round((time.perf_counter() - _t) * 1000, 2)
+        logger.info("Step 8 Human Review Routing: %.2fms", step_timings["step_8"])
         steps.append({
             "step": 8, "name": "Human Review",
             "status": "passed",
             "detail": f"Trust score {final_trust:.3f} exceeds threshold {HUMAN_REVIEW_THRESHOLD}. Auto-approved.",
-            "elapsed": 0,
+            "elapsed": step_timings["step_8"],
         })
 
     elapsed = round(time.time() - t0, 3)
@@ -389,6 +405,23 @@ async def run_audit(input_text: str, num_clusters: int = None, depth: str = "sta
         "requires_human_review": requires_review,
         "from_cache": False,
     }
+    
+    # Priority 4.2: Detect Regulatory Compliance Flags
+    flags = []
+    inp = input_text.lower()
+    feat_imp_keys = feat_imp.keys()
+    
+    if bias_score > 0.15 and ("zip_code" in feat_imp_keys or "zip code" in inp or "zip_code" in inp or "mortgage" in inp or "loan" in inp):
+        flags.append({"regulation": "ECOA §1691", "description": "zip_code proxy discrimination", "type": "warning"})
+        
+    if truth_result["truth_score"] < 0.8 and ("drug" in inp or "dosage" in inp or "medicine" in inp or "patient" in inp):
+        flags.append({"regulation": "WHO Essential Medicines", "description": "drug dosage hallucinations", "type": "danger"})
+        
+    if dist_stability < 0.7 or cluster_fairness < 0.6:
+        flags.append({"regulation": "EU AI Act Art. 10", "description": "training data quality violations", "type": "purple"})
+        
+    result["regulatory_flags"] = flags
+
     cached_result = dict(result)
     _AUDIT_CACHE[key] = cached_result
     if len(_AUDIT_CACHE) > _CACHE_LIMIT:

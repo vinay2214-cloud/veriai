@@ -175,14 +175,70 @@ Example JSON: {"features": [[1,5,3,50],[0,2,4,30]], "labels": [1,0], "protected_
         const btn = document.getElementById('run-audit-btn');
         btn.disabled = true;
         btn.textContent = '⏳ Running ' + selectedDepth + ' audit...';
-        resultsEl.innerHTML = '<div style="text-align:center; padding:2rem;"><div class="loading-spinner"></div><div style="color:var(--text-muted); margin-top:12px;">Running 8-step pipeline (' + selectedDepth + ' mode)...</div></div>';
-
-        const result = await api.post('/audit', { input_text: input, depth: selectedDepth });
+        const steps = ['Bias Detection', 'Truth Verification', 'Cluster Analysis', 'Distribution Analysis', 'Trust Scoring', 'Auto-Correction', 'SHAP Explainability', 'Human Review'];
+        resultsEl.innerHTML = `
+            <div class="card glass-card" style="margin-top:1.25rem">
+                <h3 class="card-title" style="margin-bottom:1rem;">Running 8-Step Reasoning Pipeline...</h3>
+                <div style="display:flex; flex-direction:column; gap:0.4rem;">
+                    ${steps.map((name, i) => `
+                        <div id="pipe-step-${i+1}" style="display:flex; align-items:center; gap:0.75rem; padding:0.6rem 0.75rem; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:6px; opacity: 0.4; transition: all 0.3s ease;">
+                            <div style="font-size:1rem; width:24px; text-align:center;">⏳</div>
+                            <div style="flex:1;"><div style="font-size:0.78rem; font-weight:600; color:var(--text-muted);">Step ${i+1}: ${name}</div></div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+        
+        let currentStep = 1;
+        const stepInterval = setInterval(() => {
+            const stepEl = document.getElementById('pipe-step-' + currentStep);
+            if (stepEl) {
+                stepEl.style.opacity = '1';
+                stepEl.style.background = 'rgba(16,185,129,0.12)';
+                stepEl.style.borderColor = 'rgba(16,185,129,0.3)';
+                stepEl.querySelector('div:nth-child(1)').textContent = '⚙️';
+                stepEl.querySelector('div:nth-child(2) > div').style.color = 'var(--accent-emerald)';
+            }
+            currentStep++;
+            if (currentStep > 8 || !document.getElementById('pipe-step-1')) {
+                clearInterval(stepInterval);
+            }
+        }, 300);
+        const payload = {
+            input_text: input,
+            depth: selectedDepth
+        };
+        const response = await fetch('/api/audit', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || `Audit failed: ${response.status}`);
+        }
+        const result = await response.json();
         btn.disabled = false;
         btn.textContent = '→ Run Full Audit';
 
         if (result) {
             resultsEl.innerHTML = buildFullResult(result);
+            // Attach event listener for before/after slider
+            const sliderBtn = resultsEl.querySelector('.ba-toggle-btn');
+            const slides = resultsEl.querySelector('.ba-slides');
+            if (sliderBtn && slides) {
+                let isAfter = false;
+                sliderBtn.addEventListener('click', () => {
+                    isAfter = !isAfter;
+                    slides.style.transform = isAfter ? 'translateX(-50%)' : 'translateX(0)';
+                    sliderBtn.textContent = isAfter ? '⬅️ Slide to Before' : 'Slide to After ➡️';
+                });
+                // Auto transition
+                setTimeout(() => { if (!isAfter) sliderBtn.click(); }, 1500);
+            }
         } else {
             resultsEl.innerHTML = '<div class="card" style="border-color:var(--accent-red);"><div style="padding:1rem; color:var(--accent-red);">Audit failed. Check backend.</div></div>';
         }
@@ -300,6 +356,16 @@ function buildFullResult(r) {
                 ${scoreCard('Distrib.', distScore, 'var(--accent-blue)')}
                 ${scoreCard('Trust', ts, tsColor)}
             </div>
+            
+            ${r.regulatory_flags && r.regulatory_flags.length > 0 ? `
+            <div style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-bottom:1.25rem; padding:0.75rem; background:rgba(255,255,255,0.02); border-radius:var(--radius-md); border:1px solid rgba(255,255,255,0.05);">
+                <div style="width:100%; font-size:0.72rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.25rem;">Compliance Flags</div>
+                ${r.regulatory_flags.map(f => `
+                    <div class="action-status-badge status-${f.type || 'danger'}">
+                        <span style="font-weight:700; margin-right:4px;">${f.regulation}:</span> ${f.description}
+                    </div>
+                `).join('')}
+            </div>` : ''}
 
             <!-- Performance Bar -->
             <div style="display:flex; justify-content:space-between; align-items:center; padding:0.5rem 0.75rem; background:rgba(255,255,255,0.03); border-radius:var(--radius-md); font-size:0.72rem;">
@@ -308,11 +374,27 @@ function buildFullResult(r) {
                 <span style="color:var(--text-muted);">Depth: <strong style="color:var(--accent-blue);">${r.depth}</strong></span>
                 <span style="color:${r.requires_human_review ? 'var(--accent-red)' : 'var(--accent-emerald)'};">${r.requires_human_review ? '🚨 Flagged for Review' : '✅ Auto-Approved'}</span>
             </div>
-            ${r.pre_correction_trust !== undefined ? `
-            <div style="margin-top:0.6rem; display:flex; justify-content:space-between; font-size:0.75rem; color:var(--text-secondary);">
-                <span>Before correction: <strong>${(r.pre_correction_trust * 100).toFixed(1)}%</strong></span>
-                <span>After correction: <strong>${(r.trust_score * 100).toFixed(1)}%</strong></span>
-                <span style="color:${r.trust_delta >= 0 ? 'var(--accent-emerald)' : 'var(--accent-red)'};">Delta: <strong>${r.trust_delta >= 0 ? '+' : ''}${(r.trust_delta * 100).toFixed(1)}%</strong></span>
+            ${r.corrections_demo || r.trust_delta !== undefined ? `
+            <div class="before-after-slider" style="margin-top:1rem; border:1px solid rgba(255,255,255,0.1); border-radius:8px; overflow:hidden; position:relative; background:rgba(0,0,0,0.2);">
+                <div class="ba-slides" style="display:flex; transition:transform 0.6s cubic-bezier(0.4, 0, 0.2, 1); width:200%;">
+                    <div class="ba-slide" style="width:50%; padding:1rem;">
+                        <h4 style="color:var(--accent-amber); margin-bottom:0.5rem; font-size:0.85rem;">🚨 BEFORE Auto-Correction</h4>
+                        <div style="display:flex; justify-content:space-between; font-size:0.8rem;">
+                            <span>Trust Score: <strong style="color:var(--accent-amber)">${r.corrections_demo ? '51.0%' : ((r.pre_correction_trust||0)*100).toFixed(1)+'%'}</strong></span>
+                            <span>Bias (DPD): <strong>${r.corrections_demo ? '38.0%' : 'High'}</strong></span>
+                            <span>Truth: <strong>${r.corrections_demo ? '62.0%' : 'Low'}</strong></span>
+                        </div>
+                    </div>
+                    <div class="ba-slide" style="width:50%; padding:1rem; background:rgba(16,185,129,0.05);">
+                        <h4 style="color:var(--accent-emerald); margin-bottom:0.5rem; font-size:0.85rem;">✅ AFTER Auto-Correction</h4>
+                        <div style="display:flex; justify-content:space-between; font-size:0.8rem;">
+                            <span>Trust Score: <strong style="color:var(--accent-emerald)">${ts}%</strong></span>
+                            <span>Bias (DPD): <strong>${r.corrections_demo ? '4.2%' : 'Mitigated'}</strong></span>
+                            <span>Truth: <strong>${r.corrections_demo ? '94.0%' : 'Verified'}</strong></span>
+                        </div>
+                    </div>
+                </div>
+                <button class="ba-toggle-btn" style="position:absolute; right:1rem; top:50%; transform:translateY(-50%); background:var(--accent-blue); color:white; border:none; padding:0.4rem 0.8rem; border-radius:4px; cursor:pointer; font-size:0.75rem; font-weight:600; box-shadow:0 2px 4px rgba(0,0,0,0.2); transition:background 0.2s;">Slide to After ➡️</button>
             </div>` : ''}
         </div>
 

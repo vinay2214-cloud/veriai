@@ -4,7 +4,7 @@ numpy
 scikit-learn
 pydantic
 python-multipart
-python-magic>=0.4.27
+python-magic-bin>=0.4.14
 aiosqlite
 SQLAlchemy
 asyncpg
@@ -12,6 +12,7 @@ faiss-cpu
 google-genai
 litellm
 weasyPrint
+cryptography>=42.0.0
 pandas
 reportlab
 pytest

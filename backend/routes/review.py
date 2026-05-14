@@ -7,8 +7,36 @@ from pydantic import BaseModel, Field
 from typing import Optional
 
 from .. import database as db
+from .. import config
+from ..security.audit_logger import ChainedAuditLogger
 
 router = APIRouter()
+audit_logger = ChainedAuditLogger()
+
+
+def _apply_rlhf_feedback(audit_id: str, status: str, notes: str):
+    weights = dict(config.get_active_weights())
+    old_weights = dict(weights)
+    
+    delta = 0.05 if status == "approved" else -0.05
+    
+    weights["truth"] = max(0.0, weights["truth"] + delta)
+    weights["bias"] = max(0.0, weights["bias"] - delta)
+    
+    total = sum(weights.values())
+    if total > 0:
+        new_weights = {k: round(v / total, 4) for k, v in weights.items()}
+        config.CUSTOM_WEIGHTS.clear()
+        config.CUSTOM_WEIGHTS.update(new_weights)
+        
+        audit_logger.append("rlhf_weight_update", {
+            "audit_id": audit_id,
+            "action": status,
+            "notes": notes,
+            "old_weights": old_weights,
+            "new_weights": new_weights
+        })
+
 
 
 class ReviewAction(BaseModel):
@@ -62,6 +90,7 @@ async def review_stats():
 async def approve_review(audit_id: str, action: ReviewAction):
     """Approve a flagged audit result."""
     await db.update_review_status(audit_id, "approved", action.notes)
+    _apply_rlhf_feedback(audit_id, "approved", action.notes)
     return {"status": "success", "message": f"Audit {audit_id} approved.", "audit_id": audit_id}
 
 
@@ -71,6 +100,7 @@ async def reject_review(audit_id: str, action: ReviewAction):
     if not action.notes:
         raise HTTPException(status_code=400, detail="Rejection requires reviewer notes.")
     await db.update_review_status(audit_id, "rejected", action.notes)
+    _apply_rlhf_feedback(audit_id, "rejected", action.notes)
     return {"status": "success", "message": f"Audit {audit_id} rejected.", "audit_id": audit_id}
 
 

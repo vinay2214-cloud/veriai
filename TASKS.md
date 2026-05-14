@@ -91,25 +91,28 @@ These must be implemented in ORDER. Do not skip or reorder.
 
 ## Priority 2 — Pipeline Improvements
 
-### 2.1 🟢 Make Steps 1–4 Truly Parallel
+### 2.1 ✅ Make Steps 1–4 Truly Parallel
 - In `backend/pipeline/auditor.py`
 - Use `asyncio.gather()` for steps 1–4
 - Steps 5–8 must remain sequential
-- Add timing logging (log how long each step takes)
+- Add timing logging (log how long each step takes) ✅ (timing on steps 5–8 done)
+- ✅ FormData→JSON contract fix
+- ✅ sklearn version warning
+- ✅ Numeric stability (matmul)
 
-### 2.2 🟢 Industry Weight Presets
+### 2.2 ✅ Industry Weight Presets
 - In `backend/pipeline/trust_scorer.py`
 - Implement preset switching without code change
 - Presets: Healthcare, HR/Hiring, Finance, General
 - Weights must be configurable from /api/settings endpoint
 
-### 2.3 🟡 SHAP Coefficient Caching
+### 2.3 ✅ SHAP Coefficient Caching
 - In `backend/pipeline/explainer.py`
 - Cache SHAP results by dataset hash
 - Coefficient method should return in < 50ms
 - Fallback to permutation method if coefficient method fails
 
-### 2.4 🟢 RLHF Feedback Loop
+### 2.4 ✅ RLHF Feedback Loop
 - In `backend/routers/review.py`
 - When reviewer approves/rejects, store feedback in DB
 - Feedback should increment/decrement feature weights
@@ -119,24 +122,24 @@ These must be implemented in ORDER. Do not skip or reorder.
 
 ## Priority 3 — Demo Polish (for Jury)
 
-### 3.1 🟢 Pre-loaded Demo Datasets
+### 3.1 ✅ Pre-loaded Demo Datasets
 - Create `backend/demo/datasets.py`
 - 3 demo scenarios: Hiring Bias, Healthcare Hallucination, Lending Fairness
 - Pre-computed results for each (Trust Score, bias, truth numbers)
 - Public endpoint: GET /api/demo/datasets
 
-### 3.2 🟢 Live Demo Audit Endpoint
+### 3.2 ✅ Live Demo Audit Endpoint
 - POST /api/demo/{dataset_key}/run-audit
 - No auth required
 - Runs actual pipeline on synthetic demo data
 - Results must match the demo numbers in PROJECT_CONTEXT.md
 
-### 3.3 🟡 Dashboard Animations
+### 3.3 ✅ Dashboard Animations
 - Trust Score gauge: animated counter from 0 to score
 - Pipeline steps: light up sequentially as pipeline runs
 - Before/after: slide transition when correction is applied
 
-### 3.4 🟢 Mobile Responsiveness
+### 3.4 ✅ Mobile Responsiveness
 - All 5 pages must work on 375px (iPhone) width
 - Navigation: hamburger menu on mobile
 - Charts: responsive sizing with Chart.js
@@ -145,12 +148,12 @@ These must be implemented in ORDER. Do not skip or reorder.
 
 ## Priority 4 — Compliance & Reports
 
-### 4.1 🔴 PDF Audit Report Export
+### 4.1 ✅ PDF Audit Report Export
 - Blocked on: pipeline results format finalization (2.1)
 - Generate PDF with: Trust Score, bias chart, correction log, citations
 - Use: reportlab or weasyprint
 
-### 4.2 🟢 Regulatory Compliance Flags
+### 4.2 ✅ Regulatory Compliance Flags
 - Map detected violations to specific regulations
 - ECOA §1691 → zip_code proxy discrimination
 - WHO Essential Medicines → drug dosage hallucinations

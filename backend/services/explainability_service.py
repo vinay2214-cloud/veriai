@@ -7,6 +7,8 @@ Priority:
 """
 import time
 import numpy as np
+import hashlib
+import pandas as pd
 
 from .training_service import get_live_model, preprocess_data, load_data
 
@@ -30,6 +32,34 @@ def _coefficient_explanation(model, instance_scaled, feature_names):
     contributions.sort(key=lambda x: abs(x["impact"]), reverse=True)
     base_value = float(model.intercept_[0]) if hasattr(model.intercept_, "__len__") else float(model.intercept_)
     return base_value, contributions
+
+
+def _permutation_explanation(model, X_train_scaled, instance_scaled, feature_names):
+    try:
+        import shap  # type: ignore
+    except Exception as exc:
+        raise RuntimeError("SHAP is unavailable.") from exc
+    sample_size = min(100, X_train_scaled.shape[0])
+    background = X_train_scaled[np.random.choice(X_train_scaled.shape[0], sample_size, replace=False)]
+    
+    predict_fn = getattr(model, "predict_proba", model.predict)
+    explainer = shap.Explainer(predict_fn, background, algorithm="permutation")
+    shap_values = explainer(instance_scaled)
+    
+    sv = shap_values.values[0]
+    if sv.ndim > 1:
+        sv = sv[:, 1]
+        
+    contributions = []
+    for name, val in zip(feature_names, sv):
+        if abs(val) > 0.03:
+            contributions.append({"feature": name, "impact": float(val)})
+    contributions.sort(key=lambda x: abs(x["impact"]), reverse=True)
+    
+    base = shap_values.base_values[0]
+    if isinstance(base, (list, np.ndarray)):
+        base = base[-1]
+    return float(base), contributions
 
 
 def _lime_explanation(model, X_train, instance_raw, feature_names):
@@ -78,16 +108,24 @@ def _shap_linear_explanation(model, X_train_scaled, instance_scaled, feature_nam
     return float(expected), contributions
 
 
-def generate_shap_explanation(index: int = 0, method: str = "linear") -> dict:
-    cache_key = f"{_MODEL_VERSION}:{method}:{index}"
-    if cache_key in _SHAP_CACHE:
-        cached = dict(_SHAP_CACHE[cache_key])
-        cached["from_cache"] = True
-        return cached
+def _get_dataset_hash(df: pd.DataFrame) -> str:
+    """Compute a simple dataset hash."""
+    return hashlib.sha256(pd.util.hash_pandas_object(df, index=True).values).hexdigest()
 
+
+def generate_shap_explanation(index: int = 0, method: str = "linear") -> dict:
     try:
         model, scaler = get_live_model()
         df = load_data()
+        
+        # Cache SHAP results by dataset hash
+        dataset_hash = _get_dataset_hash(df)
+        cache_key = f"{_MODEL_VERSION}:{dataset_hash}:{method}:{index}"
+        
+        if cache_key in _SHAP_CACHE:
+            cached = dict(_SHAP_CACHE[cache_key])
+            cached["from_cache"] = True
+            return cached
         X_raw, _y, feature_names = preprocess_data(df)
         if index < 0 or index >= len(X_raw):
             return {"status": "error", "message": f"Index out of range. Got {index}, max is {len(X_raw) - 1}."}
@@ -100,7 +138,15 @@ def generate_shap_explanation(index: int = 0, method: str = "linear") -> dict:
         used_method = method
 
         if method == "coefficient":
-            base_value, contributions = _coefficient_explanation(model, instance_scaled, feature_names)
+            try:
+                base_value, contributions = _coefficient_explanation(model, instance_scaled, feature_names)
+            except Exception:
+                try:
+                    base_value, contributions = _permutation_explanation(model, X_scaled, instance_scaled, feature_names)
+                    used_method = "permutation (fallback)"
+                except Exception:
+                    base_value, contributions = _lime_explanation(model, X_raw, instance_raw, feature_names)
+                    used_method = "lime (fallback)"
         elif method == "lime":
             try:
                 base_value, contributions = _lime_explanation(model, X_raw, instance_raw, feature_names)
@@ -109,11 +155,14 @@ def generate_shap_explanation(index: int = 0, method: str = "linear") -> dict:
                 base_value, contributions = _coefficient_explanation(model, instance_scaled, feature_names)
         elif method == "permutation":
             try:
-                base_value, contributions = _lime_explanation(model, X_raw, instance_raw, feature_names)
-                used_method = "lime (fallback)"
+                base_value, contributions = _permutation_explanation(model, X_scaled, instance_scaled, feature_names)
             except Exception:
-                used_method = "coefficient (fallback)"
-                base_value, contributions = _coefficient_explanation(model, instance_scaled, feature_names)
+                try:
+                    base_value, contributions = _lime_explanation(model, X_raw, instance_raw, feature_names)
+                    used_method = "lime (fallback)"
+                except Exception:
+                    used_method = "coefficient (fallback)"
+                    base_value, contributions = _coefficient_explanation(model, instance_scaled, feature_names)
         else:
             try:
                 base_value, contributions = _shap_linear_explanation(model, X_scaled, instance_scaled, feature_names)
