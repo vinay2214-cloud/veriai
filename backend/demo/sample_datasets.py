@@ -91,18 +91,9 @@ def save_demo_csvs(output_dir: str = "data/demo") -> None:
 
     hiring = generate_hiring_bias_dataset()
     hiring.to_csv(f"{output_dir}/hiring_bias_demo.csv", index=False)
-    print(f"Saved: {output_dir}/hiring_bias_demo.csv ({len(hiring)} rows)")
 
     lending = generate_lending_bias_dataset()
     lending.to_csv(f"{output_dir}/lending_bias_demo.csv", index=False)
-    print(f"Saved: {output_dir}/lending_bias_demo.csv ({len(lending)} rows)")
-    print("\nExpected bias in hiring dataset:")
-    print(f"  Male hired rate:   {hiring[hiring.gender == 'male'].hired.mean():.1%}")
-    print(f"  Female hired rate: {hiring[hiring.gender == 'female'].hired.mean():.1%}")
-    print(
-        f"  DPD (approx):      "
-        f"{abs(hiring[hiring.gender == 'male'].hired.mean() - hiring[hiring.gender == 'female'].hired.mean()):.1%}"
-    )
 
 
 if __name__ == "__main__":

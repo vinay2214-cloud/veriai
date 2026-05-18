@@ -59,10 +59,8 @@ def _get_gemini_client():
             return _GEMINI_CLIENT
         api_key = _gemini_api_key()
         if genai is None:
-            print("WARNING: google-genai is not installed. Truth-check endpoints will return 503.")
             _GEMINI_CLIENT = None
         elif not api_key:
-            print("WARNING: GEMINI_API_KEY is not configured. Truth-check endpoints will return 503.")
             _GEMINI_CLIENT = None
         else:
             _GEMINI_CLIENT = genai.Client(api_key=api_key)
