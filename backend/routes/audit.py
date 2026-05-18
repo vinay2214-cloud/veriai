@@ -1,5 +1,6 @@
 """Full audit endpoints, including mapped CSV ingestion."""
 import json
+import logging
 from typing import Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from ..models import AuditRequest
@@ -9,11 +10,13 @@ from ..services.csv_mapping_service import read_csv_bytes, infer_csv_schema, bui
 from .. import database as db
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.post("/audit")
 async def audit(request: AuditRequest):
     """Run the full multi-step audit pipeline with parallel processing."""
+    logger.info("=== AUDIT ROUTE ENTERED ===")
     # Invalidate truth cache to pick up any new KB entries
     invalidate_cache()
 
@@ -21,7 +24,7 @@ async def audit(request: AuditRequest):
     input_text = request.input_text
 
     if not input_text and request.dataset_id in {"demo_hiring", "hiring_bias_demo"}:
-        from .demo import run_demo_audit
+        from .demo_routes import run_demo_audit
         return await run_demo_audit("hiring_bias_demo")
 
     if not input_text and request.features is not None and request.labels is not None:

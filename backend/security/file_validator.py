@@ -1,142 +1,99 @@
-"""Upload validation and CSV injection protection utilities."""
-from __future__ import annotations
-
+import os
+import re
 import hashlib
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import NamedTuple, Any
 
 import pandas as pd
-from fastapi import HTTPException, UploadFile
+from fastapi import UploadFile, HTTPException
 
-try:
-    import magic  # provided by python-magic-bin
-except Exception:  # pragma: no cover
-    magic = None
-
-MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024  # 50MB
-_CHUNK_SIZE = 1024 * 1024  # 1MB
-_MIME_SNIFF_BYTES = 4096
-
-ALLOWED_MIME_TYPES = {
-    "text/csv",
-    "application/csv",
-    "text/x-csv",
-    "text/plain",
-    "text/comma-separated-values",
-    "application/vnd.ms-excel",
-}
-
-ALLOWED_EXTENSIONS = {".csv"}
-INJECTION_PATTERNS = ("=CMD(", "=SYSTEM(", "<script")
+ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls", ".json"}
+MAX_BYTES = int(os.environ.get("MAX_FILE_SIZE_MB", 10)) * 1024 * 1024
+CHUNK = 65536
 
 
-def _is_dangerous_text(value: str) -> bool:
-    if not value:
-        return False
-    text = value.lstrip()
-    if text.startswith(("=", "+", "@", "|")):
-        return True
-    lowered = text.lower()
-    return any(lowered.startswith(pattern.lower()) for pattern in INJECTION_PATTERNS)
+class ValidationResult(NamedTuple):
+    original_filename: str
+    safe_filename: str
+    extension: str
+    size_bytes: int
+    sha256: str
 
 
-async def validate_upload(file: UploadFile) -> Dict[str, Any]:
-    """Stream-validate file size + SHA256 and verify MIME/extension."""
-    if file is None:
-        raise HTTPException(status_code=400, detail="No file provided.")
+async def validate_upload(file: UploadFile) -> ValidationResult:
+    """
+    Lightweight validation for hackathon.
+    Production adds: libmagic MIME detection, injection scanning,
+    formula cell sanitization, per-user rate limiting.
+    """
+    import uuid
 
-    digest = hashlib.sha256()
-    size = 0
-    sniff = bytearray()
+    name = Path(file.filename or "upload").name
+    name = re.sub(r"[^\w\-.]", "_", name)[:200]
+    ext = Path(name).suffix.lower()
 
-    while True:
-        chunk = await file.read(_CHUNK_SIZE)
-        if not chunk:
-            break
-
-        size += len(chunk)
-        if size > MAX_UPLOAD_SIZE_BYTES:
-            raise HTTPException(status_code=400, detail="File exceeds max allowed size (50MB).")
-
-        digest.update(chunk)
-        if len(sniff) < _MIME_SNIFF_BYTES:
-            needed = _MIME_SNIFF_BYTES - len(sniff)
-            sniff.extend(chunk[:needed])
-
-    if size == 0:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
-
-    extension = Path(file.filename or "").suffix.lower()
-    detected_mime = magic.from_buffer(bytes(sniff), mime=True) if magic and sniff else "application/octet-stream"
-
-    if magic is None and extension not in ALLOWED_EXTENSIONS:
+    if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported file type: MIME detector unavailable and extension={extension or 'none'} is not allowed.",
+            status_code=415,
+            detail=f"File type '{ext}' not allowed. Use: {', '.join(ALLOWED_EXTENSIONS)}",
         )
 
-    if magic is not None and detected_mime not in ALLOWED_MIME_TYPES and extension not in ALLOWED_EXTENSIONS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported file type: mime={detected_mime}, extension={extension or 'none'}",
-        )
-
+    hasher = hashlib.sha256()
+    total = 0
     await file.seek(0)
-    return {
-        "filename": file.filename,
-        "size_bytes": size,
-        "sha256": digest.hexdigest(),
-        "mime_type": detected_mime,
-    }
+    while chunk := await file.read(CHUNK):
+        total += len(chunk)
+        hasher.update(chunk)
+        if total > MAX_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large. Max {MAX_BYTES // 1024 // 1024}MB for hackathon demo.",
+            )
+    await file.seek(0)
+
+    return ValidationResult(
+        original_filename=name,
+        safe_filename=f"{uuid.uuid4()}{ext}",
+        extension=ext,
+        size_bytes=total,
+        sha256=hasher.hexdigest(),
+    )
 
 
 def scan_for_injection(df: pd.DataFrame) -> None:
-    """Raise HTTP 400 if potentially dangerous formula/script cells are present."""
+    """
+    Lightweight CSV formula-injection guard.
+    """
     if df is None or df.empty:
         return
-
-    findings: List[Dict[str, Any]] = []
-    for col_name in df.columns:
-        series = df[col_name]
-        for row_idx, value in series.items():
-            if isinstance(value, str) and _is_dangerous_text(value):
-                findings.append(
-                    {
-                        "row": int(row_idx),
-                        "column": str(col_name),
-                        "value_preview": value[:80],
-                    }
+    for col in df.columns:
+        for value in df[col].dropna().astype(str):
+            stripped = value.lstrip()
+            if stripped.startswith(("=", "+", "@")):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Potential formula-injection content detected in uploaded dataset.",
                 )
-                if len(findings) >= 10:
-                    break
-        if len(findings) >= 10:
-            break
-
-    if findings:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "message": "Potential CSV/Excel injection detected in uploaded data.",
-                "findings": findings,
-            },
-        )
 
 
 def sanitize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
-    """Neutralize dangerous formula/script prefixes by prepending a tab."""
+    """
+    Prefix potentially dangerous formula values with tab.
+    """
     if df is None or df.empty:
         return df
 
-    safe_df = df.copy(deep=True)
-    for col_name in safe_df.columns:
-        def _sanitize(value: Any) -> Any:
-            if not isinstance(value, str):
-                return value
-            if value.startswith("\t"):
-                return value
-            if _is_dangerous_text(value):
-                return f"\t{value}"
-            return value
+    safe_df = df.copy()
 
-        safe_df[col_name] = safe_df[col_name].map(_sanitize)
+    def _sanitize(value: Any) -> Any:
+        if not isinstance(value, str):
+            return value
+        stripped = value.lstrip()
+        if stripped.startswith(("=", "+", "@")) and not value.startswith("\t"):
+            return f"\t{value}"
+        return value
+
+    for col in safe_df.columns:
+        safe_df[col] = safe_df[col].map(_sanitize)
+
     return safe_df

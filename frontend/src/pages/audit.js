@@ -110,6 +110,10 @@ Example JSON: {"features": [[1,5,3,50],[0,2,4,30]], "labels": [1,0], "protected_
         </div>
     `;
 
+    let currentDataset = null;
+    let currentTargetColumn = null;
+    let currentProtectedAttribute = null;
+
     // CSV Upload Logic
     const csvInput = document.getElementById('audit-csv-input');
     const csvStatus = document.getElementById('csv-upload-status');
@@ -128,6 +132,9 @@ Example JSON: {"features": [[1,5,3,50],[0,2,4,30]], "labels": [1,0], "protected_
         try {
             const data = await api.postForm('/upload-csv', formData);
             if (data && data.status === 'success' && data.dataset) {
+                currentDataset = data.dataset;
+                currentTargetColumn = data.label_column || null;
+                currentProtectedAttribute = data.protected_attribute || null;
                 document.getElementById('audit-input').value = JSON.stringify(data.dataset, null, 2);
                 csvStatus.innerHTML = '<div style="padding:0.75rem; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2); border-radius:6px; margin-top:0.5rem;">'
                     + '<div style="font-size:0.82rem; font-weight:600; color:var(--accent-emerald);">Dataset Loaded: ' + escapeHtml(file.name) + '</div>'
@@ -205,42 +212,62 @@ Example JSON: {"features": [[1,5,3,50],[0,2,4,30]], "labels": [1,0], "protected_
                 clearInterval(stepInterval);
             }
         }, 300);
-        const payload = {
-            input_text: input,
-            depth: selectedDepth
-        };
-        const response = await fetch('/api/audit', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(payload)
-        });
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.detail || `Audit failed: ${response.status}`);
-        }
-        const result = await response.json();
-        btn.disabled = false;
-        btn.textContent = '→ Run Full Audit';
-
-        if (result) {
-            resultsEl.innerHTML = buildFullResult(result);
-            // Attach event listener for before/after slider
-            const sliderBtn = resultsEl.querySelector('.ba-toggle-btn');
-            const slides = resultsEl.querySelector('.ba-slides');
-            if (sliderBtn && slides) {
-                let isAfter = false;
-                sliderBtn.addEventListener('click', () => {
-                    isAfter = !isAfter;
-                    slides.style.transform = isAfter ? 'translateX(-50%)' : 'translateX(0)';
-                    sliderBtn.textContent = isAfter ? '⬅️ Slide to Before' : 'Slide to After ➡️';
-                });
-                // Auto transition
-                setTimeout(() => { if (!isAfter) sliderBtn.click(); }, 1500);
+        try {
+            let payload;
+            if (currentDataset && Array.isArray(currentDataset.features) && Array.isArray(currentDataset.labels)) {
+                payload = {
+                    dataset_id: currentDataset.id || null,
+                    features: currentDataset.features,
+                    labels: currentDataset.labels,
+                    feature_names: currentDataset.feature_names || [],
+                    protected_index: Number.isInteger(currentDataset.protected_index) ? currentDataset.protected_index : 0,
+                    target_column: currentTargetColumn || null,
+                    protected_attributes: currentProtectedAttribute ? [currentProtectedAttribute] : [],
+                    audit_options: { depth: selectedDepth },
+                    depth: selectedDepth
+                };
+            } else {
+                payload = {
+                    input_text: input,
+                    audit_options: { depth: selectedDepth },
+                    depth: selectedDepth
+                };
             }
-        } else {
-            resultsEl.innerHTML = '<div class="card" style="border-color:var(--accent-red);"><div style="padding:1rem; color:var(--accent-red);">Audit failed. Check backend.</div></div>';
+
+            const response = await fetch('/api/audit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                throw new Error(err.detail || `Audit failed: ${response.status}`);
+            }
+            const result = await response.json();
+
+            if (result) {
+                resultsEl.innerHTML = buildFullResult(result);
+                // Attach event listener for before/after slider
+                const sliderBtn = resultsEl.querySelector('.ba-toggle-btn');
+                const slides = resultsEl.querySelector('.ba-slides');
+                if (sliderBtn && slides) {
+                    let isAfter = false;
+                    sliderBtn.addEventListener('click', () => {
+                        isAfter = !isAfter;
+                        slides.style.transform = isAfter ? 'translateX(-50%)' : 'translateX(0)';
+                        sliderBtn.textContent = isAfter ? '⬅️ Slide to Before' : 'Slide to After ➡️';
+                    });
+                    // Auto transition
+                    setTimeout(() => { if (!isAfter) sliderBtn.click(); }, 1500);
+                }
+            } else {
+                resultsEl.innerHTML = '<div class="card" style="border-color:var(--accent-red);"><div style="padding:1rem; color:var(--accent-red);">Audit failed. Check backend.</div></div>';
+            }
+        } catch (err) {
+            resultsEl.innerHTML = '<div class="card" style="border-color:var(--accent-red);"><div style="padding:1rem; color:var(--accent-red);">' + escapeHtml(err.message || 'Audit failed') + '</div></div>';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '→ Run Full Audit';
         }
     });
 
@@ -314,7 +341,8 @@ function buildFullResult(r) {
         const border = s.status === 'complete' ? 'rgba(16,185,129,0.3)' : (s.status === 'flagged' ? 'rgba(244,63,94,0.3)' : (s.status === 'skipped' ? 'rgba(255,255,255,0.08)' : 'rgba(59,130,246,0.3)'));
         const color = s.status === 'complete' ? 'var(--accent-emerald)' : (s.status === 'flagged' ? 'var(--accent-red)' : (s.status === 'skipped' ? 'var(--text-muted)' : 'var(--accent-blue)'));
         const badge = s.status === 'complete' ? '✓' : (s.status === 'flagged' ? '⚠' : (s.status === 'skipped' ? '—' : '●'));
-        const timing = s.elapsed > 0 ? '<span style="color:var(--accent-cyan); font-size:0.65rem;">' + (s.elapsed * 1000).toFixed(0) + 'ms</span>' : '';
+        const elapsedMs = Number(s.step) >= 5 ? s.elapsed : (s.elapsed * 1000);
+        const timing = s.elapsed > 0 ? '<span style="color:var(--accent-cyan); font-size:0.65rem;">' + elapsedMs.toFixed(0) + 'ms</span>' : '';
         return '<div style="display:flex; align-items:center; gap:0.75rem; padding:0.6rem 0.75rem; background:' + bg + '; border:1px solid ' + border + '; border-radius:6px;">' +
             '<div style="font-size:1rem; width:24px; text-align:center;">' + stepIcons[i] + '</div>' +
             '<div style="flex:1;"><div style="font-size:0.78rem; font-weight:600; color:' + color + ';">Step ' + escapeHtml(s.step) + ': ' + escapeHtml(s.name) + ' <span style="font-weight:400; opacity:0.7;">' + badge + '</span></div>' +

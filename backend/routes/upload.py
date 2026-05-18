@@ -78,7 +78,7 @@ def _infer_audit_mapping(df: pd.DataFrame) -> dict:
 
 async def _read_public_csv(file: UploadFile) -> pd.DataFrame:
     upload_meta = await validate_upload(file)
-    if upload_meta["size_bytes"] > MAX_PUBLIC_UPLOAD_MB * 1024 * 1024:
+    if upload_meta.size_bytes > MAX_PUBLIC_UPLOAD_MB * 1024 * 1024:
         raise HTTPException(status_code=413, detail=f"CSV exceeds {MAX_PUBLIC_UPLOAD_MB}MB public demo limit.")
 
     content = await file.read()

@@ -19,6 +19,10 @@ const CONFIG = Object.freeze({
   DANGEROUS_CSV_PREFIXES: ['=', '+', '@', '|', '-', '--'],
 });
 
+const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
+const SAFE_RETRY_METHODS = new Set(['GET', 'HEAD']);
+const MAX_SAFE_FETCH_RETRIES = 3;
+
 let accessToken = null;
 
 export const session = {
@@ -231,6 +235,53 @@ export function showToast(message, type = 'info', duration = 4000) {
   }, duration);
 }
 
+function getRequestMethod(options = {}) {
+  return String(options.method || 'GET').toUpperCase();
+}
+
+function canRetryRequest(options = {}) {
+  return SAFE_RETRY_METHODS.has(getRequestMethod(options));
+}
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function parseRetryAfter(value) {
+  if (!value) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+  const retryDate = Date.parse(value);
+  if (Number.isNaN(retryDate)) return null;
+  return Math.max(0, retryDate - Date.now());
+}
+
+function retryDelayMs(attempt, response) {
+  const retryAfter = parseRetryAfter(response?.headers?.get?.('Retry-After'));
+  if (retryAfter !== null) return Math.min(retryAfter, 6000);
+  return Math.min(750 * (2 ** attempt), 6000);
+}
+
+function shouldRetryResponse(response, options, attempt) {
+  return attempt < MAX_SAFE_FETCH_RETRIES
+    && canRetryRequest(options)
+    && RETRYABLE_STATUS_CODES.has(response.status);
+}
+
+function shouldRetryFetchError(err, options, attempt, hasCallerSignal) {
+  if (attempt >= MAX_SAFE_FETCH_RETRIES || !canRetryRequest(options)) return false;
+  if (err.name === 'AbortError' && hasCallerSignal) return false;
+  return err instanceof TypeError;
+}
+
+function fallbackErrorText(text, status) {
+  const lowerText = text.trim().toLowerCase();
+  if (lowerText.startsWith('<!doctype html') || lowerText.startsWith('<html') || lowerText.startsWith('<svg')) {
+    return `Server error (HTTP ${status}). The service might be temporarily unavailable.`;
+  }
+  return text.length > 200 ? text.slice(0, 200) + '...' : text;
+}
+
 /**
  * Wrapper around fetch with graceful degradation.
  * Returns { data, error } — never throws.
@@ -241,27 +292,48 @@ export function showToast(message, type = 'info', duration = 4000) {
  * @returns {Promise<{data: any|null, error: string|null}>}
  */
 export async function safeFetch(url, options = {}) {
-  try {
-    const response = await fetch(url, {
-      ...options,
-      signal: options.signal || AbortSignal.timeout(15000), // 15s timeout
-    });
-    if (!response.ok) {
-      try {
-        const body = await response.json();
-        return { data: null, error: body.detail || body.error || `HTTP ${response.status}` };
-      } catch {
-        return { data: null, error: `HTTP ${response.status}` };
+  const hasCallerSignal = Boolean(options.signal);
+  for (let attempt = 0; attempt <= MAX_SAFE_FETCH_RETRIES; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: options.signal || AbortSignal.timeout(15000), // 15s timeout
+      });
+      if (!response.ok) {
+        let error = `HTTP ${response.status}`;
+        try {
+          const text = await response.text();
+          if (text) {
+            try {
+              const body = JSON.parse(text);
+              error = body.detail || body.error || error;
+            } catch {
+              error = fallbackErrorText(text, response.status) || error;
+            }
+          }
+        } catch {
+          // Keep the status-based fallback.
+        }
+        if (shouldRetryResponse(response, options, attempt)) {
+          await delay(retryDelayMs(attempt, response));
+          continue;
+        }
+        return { data: null, error };
       }
+      const data = await response.json();
+      return { data, error: null };
+    } catch (err) {
+      if (shouldRetryFetchError(err, options, attempt, hasCallerSignal)) {
+        await delay(retryDelayMs(attempt));
+        continue;
+      }
+      if (err.name === 'AbortError') {
+        return { data: null, error: 'Request timed out. Check your connection and try again.' };
+      }
+      return { data: null, error: err.message || 'Network error. Please try again.' };
     }
-    const data = await response.json();
-    return { data, error: null };
-  } catch (err) {
-    if (err.name === 'AbortError') {
-      return { data: null, error: 'Request timed out. Check your connection and try again.' };
-    }
-    return { data: null, error: err.message || 'Network error. Please try again.' };
   }
+  return { data: null, error: 'Request failed. Please try again.' };
 }
 
 /**
@@ -292,7 +364,14 @@ export async function uploadWithProgress(url, formData, onProgress) {
           resolve({ data: null, error: data.detail || data.error || `HTTP ${xhr.status}` });
         }
       } catch {
-        resolve({ data: null, error: xhr.responseText || `HTTP ${xhr.status}` });
+        const text = xhr.responseText || '';
+        const lowerText = text.trim().toLowerCase();
+        if (lowerText.startsWith('<!doctype html') || lowerText.startsWith('<html') || lowerText.startsWith('<svg')) {
+          resolve({ data: null, error: `Server error (HTTP ${xhr.status}). The service might be temporarily unavailable.` });
+        } else {
+          const safeText = text.length > 200 ? text.slice(0, 200) + '...' : text;
+          resolve({ data: null, error: safeText || `HTTP ${xhr.status}` });
+        }
       }
     });
 

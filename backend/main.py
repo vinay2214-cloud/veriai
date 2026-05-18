@@ -2,6 +2,10 @@
 Registers all routers, initialises the database, seeds data, and
 serves the frontend as static files.
 """
+import warnings
+from sklearn.exceptions import InconsistentVersionWarning
+warnings.filterwarnings("ignore", category=InconsistentVersionWarning)
+
 import os
 os.environ['MPLCONFIGDIR'] = '/tmp/matplotlib'
 
@@ -15,9 +19,8 @@ from pathlib import Path
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
-from .routes import audit, feedback, dashboard, bias_scan, truth_check, correction, report, upload, ml, settings, review, llm_audit, demo, datasets
+from .routes import audit, feedback, dashboard, bias_scan, truth_check, correction, report, upload, ml, settings, review, llm_audit, datasets, demo_routes
 from .database import init_db
-from .config import CORS_ORIGINS
 from .sqlalchemy_db import init_sqlalchemy_models, close_engine
 from .seed_data import seed_database
 from .logging_config import configure_logging
@@ -147,14 +150,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS for local dev and the deployed Render origin. Same-origin production
-# traffic does not need CORS, but this keeps the standalone local frontend usable.
+ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "*").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 app.add_middleware(SizeLimitMiddleware)
 app.add_middleware(RateLimitMiddleware)
@@ -173,7 +176,7 @@ app.include_router(ml.router, prefix="/api", tags=["ML"])
 app.include_router(settings.router, prefix="/api", tags=["Settings"])
 app.include_router(review.router, prefix="/api", tags=["Review"])
 app.include_router(llm_audit.router, prefix="/api", tags=["LLM Audit"])
-app.include_router(demo.router, prefix="/api", tags=["Demo"])
+app.include_router(demo_routes.router, tags=["Demo"])
 app.include_router(datasets.router, prefix="/api", tags=["Datasets"])
 
 #  HEALTH CHECK   (correct position)

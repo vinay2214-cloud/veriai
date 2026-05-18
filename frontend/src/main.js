@@ -30,6 +30,77 @@ function resolveApiBase() {
 
 export const API_BASE = resolveApiBase();
 
+const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
+const SAFE_RETRY_METHODS = new Set(['GET', 'HEAD']);
+const MAX_REQUEST_RETRIES = 3;
+const DEFAULT_REQUEST_TIMEOUT_MS = 12000;
+
+function getRequestMethod(options = {}) {
+    return String(options.method || 'GET').toUpperCase();
+}
+
+function canRetryRequest(options = {}) {
+    return SAFE_RETRY_METHODS.has(getRequestMethod(options));
+}
+
+function wait(ms) {
+    return new Promise(resolve => window.setTimeout(resolve, ms));
+}
+
+function parseRetryAfter(value) {
+    if (!value) return null;
+    const seconds = Number(value);
+    if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+    const retryDate = Date.parse(value);
+    if (Number.isNaN(retryDate)) return null;
+    return Math.max(0, retryDate - Date.now());
+}
+
+function retryDelayMs(attempt, res) {
+    const retryAfter = parseRetryAfter(res?.headers?.get?.('Retry-After'));
+    if (retryAfter !== null) return Math.min(retryAfter, 6000);
+    return Math.min(750 * (2 ** attempt), 6000);
+}
+
+function shouldRetryResponse(res, options, attempt) {
+    return attempt < MAX_REQUEST_RETRIES
+        && canRetryRequest(options)
+        && RETRYABLE_STATUS_CODES.has(res.status);
+}
+
+function shouldRetryFetchError(error, options, attempt) {
+    if (attempt >= MAX_REQUEST_RETRIES || !canRetryRequest(options)) return false;
+    return error instanceof TypeError;
+}
+
+function withRequestTimeout(options = {}) {
+    if (options.signal || typeof AbortSignal === 'undefined' || typeof AbortSignal.timeout !== 'function') {
+        return options;
+    }
+    return { ...options, signal: AbortSignal.timeout(DEFAULT_REQUEST_TIMEOUT_MS) };
+}
+
+function initMobileNavigation() {
+    const btn = document.getElementById('hamburger-btn');
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+    if (!btn || !sidebar || !overlay) return;
+
+    const closeMenu = () => {
+        sidebar.classList.remove('open');
+        overlay.classList.remove('visible');
+    };
+
+    btn.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+        overlay.classList.toggle('visible');
+    });
+    overlay.addEventListener('click', closeMenu);
+    sidebar.querySelectorAll('.nav-item').forEach(item => {
+        item.addEventListener('click', closeMenu);
+    });
+}
+
 function showApiNotice(message) {
     // Use the new showToast for consistent UX; fall back to old approach
     try {
@@ -56,26 +127,45 @@ async function parseResponse(res) {
     try {
         return JSON.parse(text);
     } catch (_err) {
-        return { detail: text };
+        const lowerText = text.trim().toLowerCase();
+        if (lowerText.startsWith('<!doctype html') || lowerText.startsWith('<html') || lowerText.startsWith('<svg')) {
+            return { detail: `Server error (HTTP ${res.status}). The service might be temporarily unavailable.` };
+        }
+        // Truncate other unexpectedly long text responses to avoid breaking UI
+        const safeText = text.length > 200 ? text.slice(0, 200) + '...' : text;
+        return { detail: safeText };
     }
 }
 
 // Simple API Client
 export const apiClient = {
     async request(endpoint, options = {}) {
-        try {
-            const res = await fetch(`${API_BASE}${endpoint}`, options);
-            const payload = await parseResponse(res);
-            if (!res.ok) {
-                const detail = payload?.detail || payload?.error || `HTTP ${res.status}`;
-                throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
+        let lastError = null;
+        for (let attempt = 0; attempt <= MAX_REQUEST_RETRIES; attempt += 1) {
+            try {
+                const res = await fetch(`${API_BASE}${endpoint}`, withRequestTimeout(options));
+                const payload = await parseResponse(res);
+                if (!res.ok) {
+                    if (shouldRetryResponse(res, options, attempt)) {
+                        await wait(retryDelayMs(attempt, res));
+                        continue;
+                    }
+                    const detail = payload?.detail || payload?.error || `HTTP ${res.status}`;
+                    throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
+                }
+                return payload;
+            } catch (error) {
+                lastError = error;
+                if (shouldRetryFetchError(error, options, attempt)) {
+                    await wait(retryDelayMs(attempt));
+                    continue;
+                }
+                break;
             }
-            return payload;
-        } catch (error) {
-            console.error('API Error:', endpoint, error);
-            showApiNotice(`API issue: ${error.message}`);
-            return null;
         }
+        console.error('API Error:', endpoint, lastError);
+        showApiNotice(`API issue: ${lastError?.message || 'Request failed'}`);
+        return null;
     },
     async get(endpoint) {
         return this.request(endpoint);
@@ -185,6 +275,7 @@ async function router() {
 
 // Init
 console.log('[VeriAI] Module loaded. Hash:', window.location.hash);
+initMobileNavigation();
 window.addEventListener('hashchange', router);
 // For ES modules (deferred), DOMContentLoaded may have already fired.
 // Call router() immediately since the DOM is guaranteed ready when a

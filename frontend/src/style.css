@@ -199,6 +199,8 @@ body {
 .main-content {
   margin-left: var(--sidebar-width);
   flex: 1;
+  width: calc(100% - var(--sidebar-width));
+  min-width: 0;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -244,6 +246,8 @@ body {
 .content-area {
   padding: 2rem;
   flex: 1;
+  min-width: 0;
+  overflow-x: hidden;
   animation: fadeIn 0.4s ease;
 }
 @keyframes fadeIn {
@@ -1495,6 +1499,7 @@ tr:hover td { background: rgba(167, 139, 250, 0.04); }
 .dv-panel {
   background:rgba(19,25,30,0.78); border:1px solid rgba(255,255,255,0.08);
   border-radius:var(--radius-lg); padding:1.25rem 1.5rem;
+  min-width:0;
 }
 .dv-panel-head {
   display:flex; justify-content:space-between; align-items:center;
@@ -1504,7 +1509,7 @@ tr:hover td { background: rgba(167, 139, 250, 0.04); }
 .dv-panel-sub { font-size:0.72rem; color:var(--text-muted); }
 
 /* Top Row: 3-column */
-.dv-top-row { display:grid; grid-template-columns:1fr 1fr 1fr; gap:1.25rem; margin-bottom:1.25rem; }
+.dv-top-row { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap:1.25rem; margin-bottom:1.25rem; }
 
 /* Trust Gauge */
 .dv-panel-trust { text-align:center; display:flex; flex-direction:column; align-items:center; justify-content:center; }
@@ -1569,7 +1574,7 @@ tr:hover td { background: rgba(167, 139, 250, 0.04); }
 .dv-link:hover { text-decoration:underline; }
 
 /* Bottom Row: 3-column */
-.dv-bot-row { display:grid; grid-template-columns:1fr 1fr 1fr; gap:1.25rem; }
+.dv-bot-row { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap:1.25rem; }
 
 /* Integrity Metrics */
 .dv-integrity-metrics { display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; }
@@ -1631,9 +1636,7 @@ tr:hover td { background: rgba(167, 139, 250, 0.04); }
 
 /* Responsive */
 @media (max-width:1024px) {
-  .dv-top-row { grid-template-columns:1fr 1fr; }
   .dv-mid-row { grid-template-columns:1fr; }
-  .dv-bot-row { grid-template-columns:1fr 1fr; }
 }
 @media (max-width:700px) {
   .dv-top-row, .dv-bot-row { grid-template-columns:1fr; }

@@ -15,13 +15,14 @@ import uuid
 import time
 import asyncio
 import numpy as np
+import pandas as pd
 from typing import Dict, Any, List
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import logging
 
 from ..config import DEFAULT_NUM_CLUSTERS, HUMAN_REVIEW_THRESHOLD
-from .bias_service import compute_bias_score
+from .bias_service import compute_bias_score, compute_bias_metrics
 from .truth_service import verify_claims
 from .llm_factcheck_service import verify_text_with_llm_rag
 from .cluster_service import cluster_bias_analysis
@@ -285,7 +286,7 @@ async def run_audit(input_text: str, num_clusters: int = None, depth: str = "sta
         distribution=dist_stability,
     )
     step_timings["step_5"] = round((time.perf_counter() - _t) * 1000, 2)
-    logger.info("Step 5 Trust Scoring: %.2fms", step_timings["step_5"])
+    logger.info("Step 5 Trust Scoring completed in %.2fms", step_timings["step_5"])
     steps.append({
         "step": 5, "name": "Trust Score",
         "status": "complete",
@@ -307,7 +308,7 @@ async def run_audit(input_text: str, num_clusters: int = None, depth: str = "sta
 
     decision = "approve" if score_breakdown["trust_score"] >= 0.70 else "correct"
     step_timings["step_6"] = round((time.perf_counter() - _t) * 1000, 2)
-    logger.info("Step 6 Decision & Correction: %.2fms", step_timings["step_6"])
+    logger.info("Step 6 Decision & Correction completed in %.2fms", step_timings["step_6"])
     steps.append({
         "step": 6, "name": "Decision & Correction",
         "status": "complete",
@@ -331,7 +332,7 @@ async def run_audit(input_text: str, num_clusters: int = None, depth: str = "sta
         )
         final_trust = new_score["trust_score"]
         step_timings["step_7"] = round((time.perf_counter() - _t) * 1000, 2)
-        logger.info("Step 7 Re-evaluation: %.2fms", step_timings["step_7"])
+        logger.info("Step 7 Re-evaluation completed in %.2fms", step_timings["step_7"])
         steps.append({
             "step": 7, "name": "Re‑evaluation",
             "status": "complete",
@@ -341,7 +342,7 @@ async def run_audit(input_text: str, num_clusters: int = None, depth: str = "sta
     else:
         final_trust = score_breakdown["trust_score"]
         step_timings["step_7"] = round((time.perf_counter() - _t) * 1000, 2)
-        logger.info("Step 7 Re-evaluation: %.2fms", step_timings["step_7"])
+        logger.info("Step 7 Re-evaluation completed in %.2fms", step_timings["step_7"])
         steps.append({
             "step": 7, "name": "Re‑evaluation",
             "status": "skipped" if depth == "fast" else "skipped",
@@ -356,7 +357,7 @@ async def run_audit(input_text: str, num_clusters: int = None, depth: str = "sta
     requires_review = bool(final_trust < HUMAN_REVIEW_THRESHOLD)
     if requires_review:
         step_timings["step_8"] = round((time.perf_counter() - _t) * 1000, 2)
-        logger.info("Step 8 Human Review Routing: %.2fms", step_timings["step_8"])
+        logger.info("Step 8 Human Review Routing completed in %.2fms", step_timings["step_8"])
         steps.append({
             "step": 8, "name": "Human Review Required",
             "status": "flagged",
@@ -365,7 +366,7 @@ async def run_audit(input_text: str, num_clusters: int = None, depth: str = "sta
         })
     else:
         step_timings["step_8"] = round((time.perf_counter() - _t) * 1000, 2)
-        logger.info("Step 8 Human Review Routing: %.2fms", step_timings["step_8"])
+        logger.info("Step 8 Human Review Routing completed in %.2fms", step_timings["step_8"])
         steps.append({
             "step": 8, "name": "Human Review",
             "status": "passed",
@@ -432,4 +433,98 @@ async def run_audit(input_text: str, num_clusters: int = None, depth: str = "sta
     _AUDIT_CACHE[key] = cached_result
     if len(_AUDIT_CACHE) > _CACHE_LIMIT:
         _AUDIT_CACHE.pop(next(iter(_AUDIT_CACHE)))
+    return result
+
+
+def _factorize_mixed_frame(df: pd.DataFrame) -> pd.DataFrame:
+    work = df.copy()
+    for col in work.select_dtypes(include=["object", "category", "bool"]):
+        work[col] = pd.factorize(work[col].astype(str), sort=True)[0]
+    work = work.replace([np.inf, -np.inf], np.nan).fillna(0)
+    return work
+
+
+async def run_full_pipeline(
+    df: pd.DataFrame,
+    features: List[str],
+    target_column: str,
+    protected_attributes: List[str],
+    use_case: str | None = None,
+    audit_options: Dict[str, Any] | None = None,
+    num_clusters: int | None = None,
+    depth: str = "standard",
+) -> Dict[str, Any]:
+    """
+    Run the full audit pipeline starting from a pandas DataFrame.
+    """
+    if target_column not in df.columns:
+        raise ValueError(f"Target column '{target_column}' not found.")
+    if not features:
+        raise ValueError("At least one feature column is required.")
+
+    missing_features = [col for col in features if col not in df.columns]
+    if missing_features:
+        raise ValueError(f"Missing feature columns: {', '.join(missing_features)}")
+
+    protected_attr = protected_attributes[0] if protected_attributes else features[0]
+    if protected_attr not in df.columns:
+        protected_attr = features[0]
+
+    selected_cols = list(dict.fromkeys(features + [target_column] + [protected_attr]))
+    prepared = _factorize_mixed_frame(df[selected_cols])
+
+    y_codes = pd.factorize(prepared[target_column].astype(str), sort=True)[0]
+    if len(np.unique(y_codes)) > 2:
+        median = float(np.median(y_codes))
+        y = (y_codes > median).astype(float)
+    else:
+        y = y_codes.astype(float)
+
+    feature_names = list(features)
+    if protected_attr not in feature_names:
+        feature_names = [protected_attr] + feature_names
+
+    X = prepared[feature_names].astype(float).values
+    protected_index = feature_names.index(protected_attr)
+
+    payload = {
+        "features": X.tolist(),
+        "labels": y.tolist(),
+        "feature_names": feature_names,
+        "protected_index": protected_index,
+        "target_column": target_column,
+        "protected_attributes": [protected_attr],
+        "audit_options": audit_options or {},
+    }
+
+    result = await run_audit(
+        input_text=json.dumps(payload),
+        num_clusters=num_clusters,
+        depth=depth,
+    )
+
+    fairness_df = prepared[feature_names + [target_column]].copy()
+    fairness_df[target_column] = y.astype(int)
+    fairness_metrics = compute_bias_metrics(
+        fairness_df,
+        label_col=target_column,
+        protected_attr=protected_attr,
+    )
+
+    result.setdefault("bias", {})
+    result["bias"].update(
+        {
+            "dpd": fairness_metrics.get("dpd", 0.0),
+            "equalized_odds": fairness_metrics.get("equalized_odds", 0.0),
+            "top_feature": fairness_metrics.get("top_feature", protected_attr),
+            "demographic_parity_difference": fairness_metrics.get("demographic_parity_difference", 0.0),
+            "disparate_impact_ratio": fairness_metrics.get("disparate_impact_ratio", 0.0),
+            "protected_attribute": protected_attr,
+            "bias_detected": fairness_metrics.get("bias_detected", False),
+            "eeoc_80_rule_violated": fairness_metrics.get("eeoc_80_rule_violated", False),
+        }
+    )
+    if fairness_metrics.get("error"):
+        result["bias"]["error"] = fairness_metrics["error"]
+
     return result
