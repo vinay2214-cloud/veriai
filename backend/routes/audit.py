@@ -20,7 +20,7 @@ async def audit(request: AuditRequest):
     # Invalidate truth cache to pick up any new KB entries
     invalidate_cache()
 
-    depth = request.depth or (request.audit_options or {}).get("depth") or "standard"
+    depth = request.depth or (request.audit_options or {}).get("depth") or "fast"
     input_text = request.input_text
 
     if not input_text and request.dataset_id in {"demo_hiring", "hiring_bias_demo"}:
@@ -100,7 +100,7 @@ async def run_mapped_audit(
     file: UploadFile = File(...),
     mapping: str = Form(...),
     num_clusters: Optional[int] = Form(None),
-    depth: Optional[str] = Form("standard"),
+    depth: Optional[str] = Form("fast"),
 ):
     """Run audit from a raw CSV + user-provided column mapping."""
     content = await file.read()
@@ -122,7 +122,7 @@ async def run_mapped_audit(
     result = await run_audit(
         input_text=json.dumps(dataset_payload),
         num_clusters=num_clusters,
-        depth=depth or "standard",
+        depth=depth or "fast",
     )
     result["column_mapping"] = normalized_mapping
 

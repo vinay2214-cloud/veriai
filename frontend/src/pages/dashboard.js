@@ -1,15 +1,13 @@
 import { escapeHtml, formatDate } from '../utils.js';
 
 export async function renderDashboard(rootEl, api) {
-    const [stats, recent, reviewStats, biasData, fairnessData, driftData, modelComparison] = await Promise.all([
-        api.get('/dashboard/stats').catch(() => null),
-        api.get('/dashboard/recent').catch(() => []),
-        api.get('/review/stats').catch(() => ({ pending: 0, approved: 0, rejected: 0 })),
-        api.get('/bias').catch(() => ({ bias_score: 0, p_y_given_male: 0, p_y_given_female: 0 })),
-        api.get('/fairness').catch(() => ({ demographic_parity: 0, equal_opportunity: 0 })),
-        api.get('/dashboard/fairness-drift').catch(() => ({ status: 'stable', drift_delta: 0, points: [] })),
-        api.get('/dashboard/model-comparison').catch(() => ({ models: [] })),
-    ]);
+    const stats = await api.get('/dashboard/stats').catch(() => null);
+    const biasData = await api.get('/bias').catch(() => ({ bias_score: 0, p_y_given_male: 0, p_y_given_female: 0 }));
+    const fairnessData = await api.get('/fairness').catch(() => ({ demographic_parity: 0, equal_opportunity: 0 }));
+    const recent = await api.get('/dashboard/recent').catch(() => []);
+    const reviewStats = await api.get('/review/stats').catch(() => ({ pending: 0, approved: 0, rejected: 0 }));
+    const driftData = await api.get('/dashboard/fairness-drift').catch(() => ({ status: 'stable', drift_delta: 0, points: [] }));
+    const modelComparison = { models: [] };
 
     const s = stats || { total_audits: 0, avg_trust: 0, avg_bias: 0, avg_truth: 0, total_feedback: 0 };
     const pending = reviewStats?.pending || 0;
@@ -126,7 +124,11 @@ export async function renderDashboard(rootEl, api) {
                     </div>
                 </div>
                 <div id="shap-chart-container" style="min-height:180px">
-                    <div class="dv-loading"><div class="loading-spinner"></div><span>Loading SHAP…</span></div>
+                    <div class="dv-empty" style="padding:2rem 1rem;">
+                        <div style="font-size:1.2rem;margin-bottom:0.4rem;">📐</div>
+                        <div style="color:var(--text-secondary);font-weight:500;margin-bottom:0.3rem;">Explainability on demand</div>
+                        <div style="font-size:0.72rem;">Select Linear/Coeff/Perm/LIME to compute SHAP.</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -244,7 +246,6 @@ export async function renderDashboard(rootEl, api) {
     `;
 
     setTimeout(() => initCharts(s, biasData, fairnessData, driftData, recent), 80);
-    loadShapChart(api, 'linear');
 
     document.querySelectorAll('#shap-method-selector .method-btn').forEach(btn => {
         btn.addEventListener('click', () => {

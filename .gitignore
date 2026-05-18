@@ -36,3 +36,6 @@ logs/
 datasets/
 data/datasets/
 backend/security_datasets/
+data/demo/*.csv
+*.pkl
+node_modules/

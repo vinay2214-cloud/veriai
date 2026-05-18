@@ -12,8 +12,7 @@ WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app \
-    MPLCONFIGDIR=/tmp/matplotlib
+    PYTHONPATH=/app
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -36,4 +35,4 @@ COPY frontend/ /app/frontend/
 EXPOSE 8000
 
 # Run FastAPI (which also serves the frontend statics). Render provides PORT.
-CMD ["sh", "-c", "python -m uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "python -m uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]

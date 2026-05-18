@@ -3,11 +3,9 @@ Registers all routers, initialises the database, seeds data, and
 serves the frontend as static files.
 """
 import warnings
+import os
 from sklearn.exceptions import InconsistentVersionWarning
 warnings.filterwarnings("ignore", category=InconsistentVersionWarning)
-
-import os
-os.environ['MPLCONFIGDIR'] = '/tmp/matplotlib'
 
 import time
 from contextlib import asynccontextmanager

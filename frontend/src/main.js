@@ -30,10 +30,10 @@ function resolveApiBase() {
 
 export const API_BASE = resolveApiBase();
 
-const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
+const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 504]);
 const SAFE_RETRY_METHODS = new Set(['GET', 'HEAD']);
-const MAX_REQUEST_RETRIES = 3;
-const DEFAULT_REQUEST_TIMEOUT_MS = 12000;
+const MAX_REQUEST_RETRIES = 1;
+const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
 
 function getRequestMethod(options = {}) {
     return String(options.method || 'GET').toUpperCase();
@@ -159,6 +159,10 @@ export const apiClient = {
                 if (shouldRetryFetchError(error, options, attempt)) {
                     await wait(retryDelayMs(attempt));
                     continue;
+                }
+                if (error?.name === 'AbortError') {
+                    showApiNotice('Audit is taking longer than expected. Please retry in a moment.');
+                    return null;
                 }
                 break;
             }

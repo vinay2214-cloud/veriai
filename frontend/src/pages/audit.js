@@ -8,15 +8,15 @@ export async function renderAuditPage(rootEl, api) {
                 <h2 style="font-size:1.4rem; font-weight:700;">Run AI Trust Audit</h2>
             </div>
             <div id="depth-control" style="display:flex; background:rgba(255,255,255,0.05); border-radius:var(--radius-md); border:1px solid rgba(255,255,255,0.1); overflow:hidden;">
-                <button class="depth-btn" data-depth="fast" title="Bias + Truth only (~1s)" style="background:transparent; border:none; color:var(--text-secondary); padding:0.5rem 1rem; cursor:pointer; font-size:0.82rem;">⚡ Fast</button>
-                <button class="depth-btn active" data-depth="standard" title="All 4 parallel checks (~3s)" style="background:rgba(59,130,246,0.2); border:none; color:var(--accent-blue); padding:0.5rem 1rem; cursor:pointer; font-size:0.82rem; border-left:1px solid rgba(255,255,255,0.1); border-right:1px solid rgba(255,255,255,0.1);">🔍 Standard</button>
+                <button class="depth-btn active" data-depth="fast" title="Bias + Truth only (~1s)" style="background:rgba(59,130,246,0.2); border:none; color:var(--accent-blue); padding:0.5rem 1rem; cursor:pointer; font-size:0.82rem;">⚡ Fast</button>
+                <button class="depth-btn" data-depth="standard" title="All 4 parallel checks (~3s)" style="background:transparent; border:none; color:var(--text-secondary); padding:0.5rem 1rem; cursor:pointer; font-size:0.82rem; border-left:1px solid rgba(255,255,255,0.1); border-right:1px solid rgba(255,255,255,0.1);">🔍 Standard</button>
                 <button class="depth-btn" data-depth="thorough" title="Full pipeline + re-evaluation (~8s)" style="background:transparent; border:none; color:var(--text-secondary); padding:0.5rem 1rem; cursor:pointer; font-size:0.82rem;">🔬 Thorough</button>
             </div>
         </div>
 
         <!-- Depth Info -->
         <div id="depth-info" style="font-size:0.75rem; color:var(--accent-cyan); margin-bottom:1rem; padding:0.5rem 0.75rem; background:rgba(6,182,212,0.05); border:1px solid rgba(6,182,212,0.15); border-radius:var(--radius-md);">
-            🔍 <strong>Standard</strong> — Steps 1-4 run in parallel via <code style="color:var(--accent-purple);">asyncio.gather</code> (~3s). Bias + Truth + Cluster + Distribution.
+            ⚡ <strong>Fast</strong> — Bias + Truth only, parallel via <code style="color:var(--accent-purple);">asyncio.gather</code> (~1s). Steps 3-4 skipped.
         </div>
 
         <!-- Audit Input -->
@@ -159,7 +159,7 @@ Example JSON: {"features": [[1,5,3,50],[0,2,4,30]], "labels": [1,0], "protected_
     });
 
     // Depth control
-    let selectedDepth = 'standard';
+    let selectedDepth = 'fast';
     const depthDescriptions = {
         fast: '⚡ <strong>Fast</strong> — Bias + Truth only, parallel via <code style="color:var(--accent-purple);">asyncio.gather</code> (~1s). Steps 3-4 skipped.',
         standard: '🔍 <strong>Standard</strong> — Steps 1-4 run in parallel via <code style="color:var(--accent-purple);">asyncio.gather</code> (~3s). Bias + Truth + Cluster + Distribution.',
