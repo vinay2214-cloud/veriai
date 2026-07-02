@@ -29,6 +29,9 @@ function resolveApiBase() {
 }
 
 export const API_BASE = resolveApiBase();
+// Expose for non-module consumers (e.g. anchor hrefs in page templates) without
+// forcing a circular import of this module.
+window.__VERIAI_API_BASE__ = API_BASE;
 
 const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 504]);
 const SAFE_RETRY_METHODS = new Set(['GET', 'HEAD']);

@@ -1,5 +1,8 @@
 import { escapeHtml, formatDate } from '../utils.js';
 
+// Resolved by main.js; fall back to a same-origin relative path.
+const API_BASE = window.__VERIAI_API_BASE__ || '/api';
+
 export async function renderReportsPage(rootEl, api, id = null) {
     if (id) {
         // Detailed report view
@@ -27,7 +30,7 @@ export async function renderReportsPage(rootEl, api, id = null) {
                         <tbody>
                             ${recent ? recent.map(r => `
                                 <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
-                                    <td style="padding: 16px;"><span class="badge badge-purple" style="font-family:var(--font-mono);">${escapeHtml(r.audit_id.substring(0,8))}...</span></td>
+                                    <td style="padding: 16px;"><span class="badge badge-purple" style="font-family:var(--font-mono);">${escapeHtml(String(r.audit_id || '').substring(0,8))}...</span></td>
                                     <td style="padding: 16px; color:var(--text-secondary);">${formatDate(r.created_at)}</td>
                                     <td style="padding: 16px; color:var(--text-primary); max-width:250px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(r.input)}</td>
                                     <td style="padding: 16px;">
@@ -113,10 +116,10 @@ async function renderSingleReport(rootEl, api, id) {
                     
                     <div style="margin-top:auto; padding-top:1.5rem;">
                         <div style="display:flex; gap:0.5rem;">
-                            <a class="btn btn-action" href="/api/reports/${encodeURIComponent(report.audit_id)}/export?format=pdf" style="flex:1; padding:0.75rem; background:rgba(255,255,255,0.05); color:var(--text-primary); border:1px solid var(--border-glass); border-radius:var(--radius-md); display:flex; align-items:center; justify-content:center; gap:0.5rem; text-decoration:none;">
+                            <a class="btn btn-action" href="${API_BASE}/reports/${encodeURIComponent(report.audit_id)}/export?format=pdf" style="flex:1; padding:0.75rem; background:rgba(255,255,255,0.05); color:var(--text-primary); border:1px solid var(--border-glass); border-radius:var(--radius-md); display:flex; align-items:center; justify-content:center; gap:0.5rem; text-decoration:none;">
                                 <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg> Export PDF
                             </a>
-                            <a class="btn btn-action" href="/api/reports/${encodeURIComponent(report.audit_id)}/export?format=json" style="flex:1; padding:0.75rem; background:rgba(59,130,246,0.08); color:var(--accent-cyan); border:1px solid rgba(59,130,246,0.25); border-radius:var(--radius-md); display:flex; align-items:center; justify-content:center; gap:0.5rem; text-decoration:none;">
+                            <a class="btn btn-action" href="${API_BASE}/reports/${encodeURIComponent(report.audit_id)}/export?format=json" style="flex:1; padding:0.75rem; background:rgba(59,130,246,0.08); color:var(--accent-cyan); border:1px solid rgba(59,130,246,0.25); border-radius:var(--radius-md); display:flex; align-items:center; justify-content:center; gap:0.5rem; text-decoration:none;">
                                 JSON
                             </a>
                         </div>

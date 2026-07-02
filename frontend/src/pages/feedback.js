@@ -60,7 +60,7 @@ export async function renderFeedbackPage(rootEl, api) {
                         <tbody id="fb-table-body">
                             ${history && history.length > 0 ? history.slice(0, 6).map(h => `
                                 <tr style="border-bottom: 1px solid rgba(255,255,255,0.03); transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
-                                    <td style="padding: 12px 10px;"><span class="badge badge-purple" style="font-family:var(--font-mono);">${h.audit_id.substring(0,8)}</span></td>
+                                    <td style="padding: 12px 10px;"><span class="badge badge-purple" style="font-family:var(--font-mono);">${String(h.audit_id || '').substring(0,8)}</span></td>
                                     <td style="padding: 12px 10px;">${h.correct ? '<span style="color:var(--accent-emerald); font-weight:600; display:flex; align-items:center; gap:0.25rem;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg> Yes</span>' : '<span style="color:var(--accent-red); font-weight:600; display:flex; align-items:center; gap:0.25rem;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 18L18 6M6 6l12 12"/></svg> No</span>'}</td>
                                     <td style="padding: 12px 10px;">
                                         <span class="badge ${h.bias_flag ? 'badge-red' : 'badge-green'}">${h.bias_flag ? 'Detected' : 'Clear'}</span>
@@ -113,9 +113,9 @@ export async function renderFeedbackPage(rootEl, api) {
             
             // Refresh table smoothly
             const newHistory = await api.get('/feedback/history');
-            document.getElementById('fb-table-body').innerHTML = newHistory.slice(0, 6).map(h => `
+            document.getElementById('fb-table-body').innerHTML = (Array.isArray(newHistory) ? newHistory : []).slice(0, 6).map(h => `
                 <tr style="border-bottom: 1px solid rgba(255,255,255,0.03); animation: fadeUp 0.3s ease-out;">
-                    <td style="padding: 12px 10px;"><span class="badge badge-purple" style="font-family:var(--font-mono);">${h.audit_id.substring(0,8)}</span></td>
+                    <td style="padding: 12px 10px;"><span class="badge badge-purple" style="font-family:var(--font-mono);">${String(h.audit_id || '').substring(0,8)}</span></td>
                     <td style="padding: 12px 10px;">${h.correct ? '<span style="color:var(--accent-emerald); font-weight:600; display:flex; align-items:center; gap:0.25rem;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg> Yes</span>' : '<span style="color:var(--accent-red); font-weight:600; display:flex; align-items:center; gap:0.25rem;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 18L18 6M6 6l12 12"/></svg> No</span>'}</td>
                     <td style="padding: 12px 10px;">
                         <span class="badge ${h.bias_flag ? 'badge-red' : 'badge-green'}">${h.bias_flag ? 'Detected' : 'Clear'}</span>

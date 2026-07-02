@@ -234,16 +234,7 @@ Example JSON: {"features": [[1,5,3,50],[0,2,4,30]], "labels": [1,0], "protected_
                 };
             }
 
-            const response = await fetch('/api/audit', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            if (!response.ok) {
-                const err = await response.json().catch(() => ({}));
-                throw new Error(err.detail || `Audit failed: ${response.status}`);
-            }
-            const result = await response.json();
+            const result = await api.post('/audit', payload);
 
             if (result) {
                 resultsEl.innerHTML = buildFullResult(result);

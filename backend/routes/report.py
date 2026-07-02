@@ -6,11 +6,6 @@ import json
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse, StreamingResponse
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
-from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from .. import database as db
 
 router = APIRouter()
@@ -30,6 +25,13 @@ async def get_report(audit_id: str):
         except Exception:
             report_json = None
 
+    column_mapping = None
+    if len(row) > 10 and row[10]:
+        try:
+            column_mapping = json.loads(row[10])
+        except Exception:
+            column_mapping = None
+
     base = {
         "audit_id": row[0],
         "input": row[1],
@@ -40,7 +42,7 @@ async def get_report(audit_id: str):
         "audit_type": row[6] if len(row) > 6 else "dataset",
         "model_name": row[7] if len(row) > 7 else None,
         "prompt": row[8] if len(row) > 8 else None,
-        "column_mapping": json.loads(row[10]) if len(row) > 10 and row[10] else None,
+        "column_mapping": column_mapping,
         "created_at": row[11] if len(row) > 11 else None,
     }
     if report_json:
@@ -56,6 +58,14 @@ async def export_report(audit_id: str, format: str = Query("json", pattern="^(js
     payload = await get_report(audit_id)
     if format == "json":
         return JSONResponse(payload)
+
+    # Import reportlab lazily — it is only needed for PDF export, so this keeps
+    # a heavy dependency off the process-startup import path.
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
@@ -132,9 +142,10 @@ async def export_report(audit_id: str, format: str = Query("json", pattern="^(js
     if reasoning:
         story.append(Paragraph("8-Step Reasoning Pipeline", h2_style))
         for step in reasoning:
-            status_color = "#10b981" if step.get('status') == 'complete' else "#ef4444"
+            step_status = str(step.get('status') or 'unknown')
+            status_color = "#10b981" if step_status == 'complete' else "#ef4444"
             story.append(Paragraph(
-                f"<b>Step {step.get('step')}: {step.get('name')}</b> <font color='{status_color}'>[{step.get('status').upper()}]</font>", 
+                f"<b>Step {step.get('step')}: {step.get('name')}</b> <font color='{status_color}'>[{step_status.upper()}]</font>",
                 normal_style
             ))
             story.append(Paragraph(f"Detail: {step.get('detail')}", normal_style))
@@ -143,11 +154,14 @@ async def export_report(audit_id: str, format: str = Query("json", pattern="^(js
     review = payload.get("review")
     if review:
         story.append(Paragraph("Human Review Trail", h2_style))
-        story.append(Paragraph(f"<b>Status:</b> {review.get('status').upper()}", normal_style))
+        story.append(Paragraph(f"<b>Status:</b> {str(review.get('status') or 'unknown').upper()}", normal_style))
         story.append(Paragraph(f"<b>Notes:</b> {review.get('reviewer_notes')}", normal_style))
         story.append(Paragraph(f"<b>Date:</b> {review.get('reviewed_at')}", normal_style))
-        
-    doc.build(story)
+
+    try:
+        doc.build(story)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to render PDF report: {exc}")
     buf.seek(0)
     return StreamingResponse(
         buf,

@@ -7,9 +7,12 @@ import sqlite3
 from threading import Lock
 from typing import Dict, List, Optional, Tuple
 import numpy as np
-import faiss
 from fastapi import HTTPException, status
-from sklearn.feature_extraction.text import TfidfVectorizer
+# faiss and sklearn's TfidfVectorizer are imported lazily inside the functions
+# that use them (see _build_tfidf_index / _load_knowledge_base) to keep these
+# heavy libraries off the process-startup import path. Annotations that
+# reference them stay valid because `from __future__ import annotations` above
+# defers annotation evaluation.
 from ..config import DB_PATH, RAG_SIMILARITY_THRESHOLD
 
 try:
@@ -138,6 +141,8 @@ def _normalize_matrix(matrix: np.ndarray) -> np.ndarray:
 
 def _build_tfidf_index(texts: List[str]) -> Tuple[faiss.IndexFlatIP, TfidfVectorizer]:
     """Build a local FAISS index when external embedding credentials are absent."""
+    import faiss
+    from sklearn.feature_extraction.text import TfidfVectorizer
     vectorizer = TfidfVectorizer(
         stop_words="english",
         ngram_range=(1, 2),
@@ -175,6 +180,7 @@ async def _load_knowledge_base():
     texts = [rec["content"] for rec in records]
 
     if embedding_service_configured():
+        import faiss
         matrix = await _encode_texts(texts)
         index = faiss.IndexFlatIP(EMBED_DIMENSION)
         index.add(matrix)

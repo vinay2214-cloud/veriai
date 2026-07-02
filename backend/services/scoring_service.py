@@ -23,22 +23,22 @@ def compute_trust_score(
 ) -> Dict[str, float]:
     """Calculate the weighted trust score using the fixed 3-signal formula."""
     active_weights = get_active_weights()
-    bias_contrib = (1 - bias) 
-    
+    # Defensive: a partial CUSTOM_WEIGHTS must not KeyError inside every audit.
+    w_truth = float(active_weights.get("truth", 0.40))
+    w_bias = float(active_weights.get("bias", 0.40))
+    w_confidence = float(active_weights.get("confidence", 0.20))
+    bias_contrib = (1 - bias)
+
     # Order must match between features and weights arrays
     features = [truth, bias_contrib, confidence]
-    weights_array = [
-        active_weights["truth"], 
-        active_weights["bias"], 
-        active_weights["confidence"], 
-    ]
-    
+    weights_array = [w_truth, w_bias, w_confidence]
+
     trust_score = weighted_score(features, weights_array)
-    
+
     components = {
-        "truth": truth * active_weights["truth"],
-        "bias": bias_contrib * active_weights["bias"],
-        "confidence": confidence * active_weights["confidence"],
+        "truth": truth * w_truth,
+        "bias": bias_contrib * w_bias,
+        "confidence": confidence * w_confidence,
         "cluster_diagnostic": cluster,
         "distribution_diagnostic": distribution,
     }

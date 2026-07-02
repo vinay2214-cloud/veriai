@@ -57,25 +57,27 @@ async def audit(request: AuditRequest):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    # Persist to SQLite
-    await db.insert_audit(
-        audit_id=result["audit_id"],
-        input_text=result["input_text"],
-        bias_score=result["bias"]["bias_score"],
-        truth_score=result["truth"]["truth_score"],
-        trust_score=result["trust_score"],
-        corrected=result.get("corrections", ""),
-        audit_type=result.get("audit_type", "dataset"),
-        report_json=result,
-    )
-
-    # If flagged for human review, add to review queue
-    if result.get("requires_human_review"):
-        await db.insert_review(
+    # Persist to SQLite. A DB hiccup must not discard an already-completed audit.
+    try:
+        await db.insert_audit(
             audit_id=result["audit_id"],
+            input_text=result["input_text"],
+            bias_score=result["bias"]["bias_score"],
+            truth_score=result["truth"]["truth_score"],
             trust_score=result["trust_score"],
-            input_preview=result["input_text"][:200],
+            corrected=result.get("corrections", ""),
+            audit_type=result.get("audit_type", "dataset"),
+            report_json=result,
         )
+        # If flagged for human review, add to review queue
+        if result.get("requires_human_review"):
+            await db.insert_review(
+                audit_id=result["audit_id"],
+                trust_score=result["trust_score"],
+                input_preview=result["input_text"][:200],
+            )
+    except Exception:
+        logger.exception("Failed to persist audit %s", result.get("audit_id"))
 
     return result
 
@@ -119,29 +121,34 @@ async def run_mapped_audit(
 
     invalidate_cache()
 
-    result = await run_audit(
-        input_text=json.dumps(dataset_payload),
-        num_clusters=num_clusters,
-        depth=depth or "fast",
-    )
+    try:
+        result = await run_audit(
+            input_text=json.dumps(dataset_payload),
+            num_clusters=num_clusters,
+            depth=depth or "fast",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     result["column_mapping"] = normalized_mapping
 
-    await db.insert_audit(
-        audit_id=result["audit_id"],
-        input_text=result["input_text"],
-        bias_score=result["bias"]["bias_score"],
-        truth_score=result["truth"]["truth_score"],
-        trust_score=result["trust_score"],
-        corrected=result.get("corrections", ""),
-        audit_type="dataset",
-        report_json=result,
-        column_mapping=json.dumps(normalized_mapping),
-    )
-
-    if result.get("requires_human_review"):
-        await db.insert_review(
+    try:
+        await db.insert_audit(
             audit_id=result["audit_id"],
+            input_text=result["input_text"],
+            bias_score=result["bias"]["bias_score"],
+            truth_score=result["truth"]["truth_score"],
             trust_score=result["trust_score"],
-            input_preview=result["input_text"][:200],
+            corrected=result.get("corrections", ""),
+            audit_type="dataset",
+            report_json=result,
+            column_mapping=json.dumps(normalized_mapping),
         )
+        if result.get("requires_human_review"):
+            await db.insert_review(
+                audit_id=result["audit_id"],
+                trust_score=result["trust_score"],
+                input_preview=result["input_text"][:200],
+            )
+    except Exception:
+        logger.exception("Failed to persist mapped audit %s", result.get("audit_id"))
     return result

@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -5,6 +7,7 @@ from .. import database as db
 from ..services.llm_audit_service import audit_llm_output
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class LLMAuditRequest(BaseModel):
@@ -24,23 +27,25 @@ async def audit_llm_endpoint(request: LLMAuditRequest):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    await db.insert_audit(
-        audit_id=result["audit_id"],
-        input_text=result["input_text"],
-        bias_score=result["bias"]["bias_score"],
-        truth_score=result["truth"]["truth_score"],
-        trust_score=result["trust_score"],
-        corrected=result.get("corrections", ""),
-        audit_type="llm",
-        model_name=result.get("model_name"),
-        prompt=result.get("prompt"),
-        report_json=result,
-    )
-
-    if result.get("requires_human_review"):
-        await db.insert_review(
+    try:
+        await db.insert_audit(
             audit_id=result["audit_id"],
+            input_text=result["input_text"],
+            bias_score=result["bias"]["bias_score"],
+            truth_score=result["truth"]["truth_score"],
             trust_score=result["trust_score"],
-            input_preview=result["input_text"][:200],
+            corrected=result.get("corrections", ""),
+            audit_type="llm",
+            model_name=result.get("model_name"),
+            prompt=result.get("prompt"),
+            report_json=result,
         )
+        if result.get("requires_human_review"):
+            await db.insert_review(
+                audit_id=result["audit_id"],
+                trust_score=result["trust_score"],
+                input_preview=result["input_text"][:200],
+            )
+    except Exception:
+        logger.exception("Failed to persist LLM audit %s", result.get("audit_id"))
     return result

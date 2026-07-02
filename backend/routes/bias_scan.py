@@ -40,7 +40,12 @@ async def bias_scan(request: BiasScanRequest):
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    bias_score, feat_imp, dp, eo = compute_bias_score(X, y, prot_idx, names)
+    try:
+        bias_score, feat_imp, dp, eo = compute_bias_score(X, y, prot_idx, names)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Bias computation failed: {exc}")
     return {
         "bias_score": round(bias_score, 4),
         "demographic_parity": round(dp, 4),

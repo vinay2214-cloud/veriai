@@ -63,7 +63,10 @@ async def explain_endpoint(index: int = 0, method: str = "linear"):
     """Return SHAP explanation for a given instance.
     Methods: linear (default), coefficient (fastest), permutation (slow).
     """
-    result = generate_shap_explanation(index, method=method)
+    try:
+        result = generate_shap_explanation(index, method=method)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Explanation failed: {exc}")
     if result.get("status") == "error":
         raise HTTPException(status_code=500, detail=result.get("message"))
     return result

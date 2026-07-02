@@ -109,4 +109,7 @@ async def fairness_drift():
 
 @router.get("/dashboard/model-comparison")
 async def model_comparison():
-    return compare_models()
+    try:
+        return compare_models()
+    except Exception:
+        return {"models": [], "status": "unavailable"}

@@ -2,6 +2,7 @@
 Accepts a CSV file, parses it, and returns JSON or passes it to the audit engine.
 Also handles knowledge base article uploads for the FAISS vector store.
 """
+import logging
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel
 from typing import List
@@ -14,6 +15,7 @@ from ..services.csv_mapping_service import build_mapped_dataset
 from ..security.file_validator import sanitize_dataframe, scan_for_injection, validate_upload
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class KBArticle(BaseModel):
@@ -209,77 +211,98 @@ async def upload_csv_knowledge(file: UploadFile = File(...)):
 @router.post("/knowledge-base/add")
 async def add_knowledge_article(article: KBArticle):
     """Add a single article to the FAISS knowledge base."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    # Check duplicate
-    cursor.execute("SELECT COUNT(*) FROM knowledge_base WHERE title = ?", (article.title,))
-    if cursor.fetchone()[0] > 0:
-        conn.close()
-        return {"status": "duplicate", "message": f"Article '{article.title}' already exists."}
-    
-    cursor.execute(
-        "INSERT INTO knowledge_base (title, content, source) VALUES (?, ?, ?)",
-        (article.title, article.content[:2500], article.source[:300])
-    )
-    cursor.execute(
-        "DELETE FROM knowledge_base WHERE id NOT IN (SELECT id FROM knowledge_base ORDER BY id DESC LIMIT ?)",
-        (MAX_KB_ARTICLES,),
-    )
-    conn.commit()
-    
-    cursor.execute("SELECT COUNT(*) FROM knowledge_base")
-    total = cursor.fetchone()[0]
-    conn.close()
-    
+    conn = None
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+
+        # Check duplicate
+        cursor.execute("SELECT COUNT(*) FROM knowledge_base WHERE title = ?", (article.title,))
+        if cursor.fetchone()[0] > 0:
+            return {"status": "duplicate", "message": f"Article '{article.title}' already exists."}
+
+        cursor.execute(
+            "INSERT INTO knowledge_base (title, content, source) VALUES (?, ?, ?)",
+            (article.title, article.content[:2500], article.source[:300])
+        )
+        cursor.execute(
+            "DELETE FROM knowledge_base WHERE id NOT IN (SELECT id FROM knowledge_base ORDER BY id DESC LIMIT ?)",
+            (MAX_KB_ARTICLES,),
+        )
+        conn.commit()
+
+        cursor.execute("SELECT COUNT(*) FROM knowledge_base")
+        total = cursor.fetchone()[0]
+    except sqlite3.Error:
+        logger.exception("knowledge-base/add failed")
+        raise HTTPException(status_code=503, detail="Knowledge base is temporarily unavailable.")
+    finally:
+        if conn is not None:
+            conn.close()
+
     # Invalidate FAISS cache
     invalidate_cache()
-    
+
     return {"status": "success", "total_articles": total}
 
 
 @router.post("/knowledge-base/bulk")
 async def add_knowledge_bulk(data: KBBulkUpload):
     """Add multiple articles to the FAISS knowledge base."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    inserted = 0
-    
-    for article in data.articles:
-        cursor.execute("SELECT COUNT(*) FROM knowledge_base WHERE title = ?", (article.title,))
-        if cursor.fetchone()[0] == 0:
-            cursor.execute(
-                "INSERT INTO knowledge_base (title, content, source) VALUES (?, ?, ?)",
-                (article.title, article.content[:2500], article.source[:300])
-            )
-            inserted += 1
-    cursor.execute(
-        "DELETE FROM knowledge_base WHERE id NOT IN (SELECT id FROM knowledge_base ORDER BY id DESC LIMIT ?)",
-        (MAX_KB_ARTICLES,),
-    )
-    
-    conn.commit()
-    cursor.execute("SELECT COUNT(*) FROM knowledge_base")
-    total = cursor.fetchone()[0]
-    conn.close()
-    
+    conn = None
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        inserted = 0
+
+        for article in data.articles:
+            cursor.execute("SELECT COUNT(*) FROM knowledge_base WHERE title = ?", (article.title,))
+            if cursor.fetchone()[0] == 0:
+                cursor.execute(
+                    "INSERT INTO knowledge_base (title, content, source) VALUES (?, ?, ?)",
+                    (article.title, article.content[:2500], article.source[:300])
+                )
+                inserted += 1
+        cursor.execute(
+            "DELETE FROM knowledge_base WHERE id NOT IN (SELECT id FROM knowledge_base ORDER BY id DESC LIMIT ?)",
+            (MAX_KB_ARTICLES,),
+        )
+
+        conn.commit()
+        cursor.execute("SELECT COUNT(*) FROM knowledge_base")
+        total = cursor.fetchone()[0]
+    except sqlite3.Error:
+        logger.exception("knowledge-base/bulk failed")
+        raise HTTPException(status_code=503, detail="Knowledge base is temporarily unavailable.")
+    finally:
+        if conn is not None:
+            conn.close()
+
     invalidate_cache()
-    
+
     return {"status": "success", "articles_inserted": inserted, "total_articles": total}
 
 
 @router.get("/knowledge-base/stats")
 async def knowledge_base_stats():
     """Get knowledge base statistics for the FAISS vector store."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    cursor.execute("SELECT COUNT(*) FROM knowledge_base")
-    total = cursor.fetchone()[0]
-    
-    cursor.execute("SELECT title, source FROM knowledge_base ORDER BY id DESC LIMIT 5")
-    recent = [{"title": r[0], "source": r[1]} for r in cursor.fetchall()]
-    
+    conn = None
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT COUNT(*) FROM knowledge_base")
+        total = cursor.fetchone()[0]
+
+        cursor.execute("SELECT title, source FROM knowledge_base ORDER BY id DESC LIMIT 5")
+        recent = [{"title": r[0], "source": r[1]} for r in cursor.fetchall()]
+    except sqlite3.Error:
+        logger.exception("knowledge-base/stats failed")
+        raise HTTPException(status_code=503, detail="Knowledge base is temporarily unavailable.")
+    finally:
+        if conn is not None:
+            conn.close()
+
     # Build the FAISS cache lazily so the Settings page reflects the real
     # indexed state after startup, before the first truth-check request.
     from ..services import truth_service
@@ -290,9 +313,7 @@ async def knowledge_base_stats():
         except Exception as exc:
             index_error = str(exc)
     faiss_status = "connected" if truth_service._KB_CACHE is not None else ("empty" if total == 0 else "degraded")
-    
-    conn.close()
-    
+
     return {
         "total_articles": total,
         "recent_articles": recent,

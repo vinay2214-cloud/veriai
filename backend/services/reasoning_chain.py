@@ -21,7 +21,7 @@ from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import logging
 
-from ..config import DEFAULT_NUM_CLUSTERS, HUMAN_REVIEW_THRESHOLD
+from ..config import DEFAULT_NUM_CLUSTERS, HUMAN_REVIEW_THRESHOLD, get_active_weights
 from .bias_service import compute_bias_score, compute_bias_metrics
 from .truth_service import verify_claims
 from .llm_factcheck_service import verify_text_with_llm_rag
@@ -82,7 +82,12 @@ def _parse_dataset(raw: str):
 
 
 def _cache_key(input_text: str, num_clusters: int, depth: str) -> str:
-    raw = f"{depth}|{num_clusters}|{input_text}".encode("utf-8")
+    # Include the active trust weights so a weight change (via Settings or the
+    # RLHF review loop) invalidates cached audits instead of returning a stale
+    # trust score for the same input.
+    weights = get_active_weights()
+    weights_sig = "|".join(f"{k}={weights.get(k)}" for k in sorted(weights))
+    raw = f"{depth}|{num_clusters}|{weights_sig}|{input_text}".encode("utf-8")
     return hashlib.sha256(raw).hexdigest()
 
 

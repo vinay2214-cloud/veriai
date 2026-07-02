@@ -4,8 +4,10 @@ serves the frontend as static files.
 """
 import warnings
 import os
-from sklearn.exceptions import InconsistentVersionWarning
-warnings.filterwarnings("ignore", category=InconsistentVersionWarning)
+# Silence sklearn's InconsistentVersionWarning by message so we don't import
+# sklearn at process startup just to reference the warning class.
+warnings.filterwarnings("ignore", message=".*InconsistentVersionWarning.*")
+warnings.filterwarnings("ignore", message=".*Trying to unpickle estimator.*")
 
 import time
 from contextlib import asynccontextmanager
