@@ -2,7 +2,8 @@
 Provides Demographic Parity and Equal Opportunity metrics.
 """
 import numpy as np
-from sklearn.metrics import confusion_matrix
+# sklearn.metrics.confusion_matrix is imported lazily inside equal_opportunity
+# (Phase 2 startup optimization).
 from .training_service import load_model, get_live_model, preprocess_data, load_data
 
 def demographic_parity(y_pred: np.ndarray, protected: np.ndarray) -> float:
@@ -13,6 +14,8 @@ def demographic_parity(y_pred: np.ndarray, protected: np.ndarray) -> float:
 
 def equal_opportunity(y_true: np.ndarray, y_pred: np.ndarray, protected: np.ndarray) -> float:
     """Calculate the absolute difference in true positive rates (Recall) across protected groups."""
+    from sklearn.metrics import confusion_matrix
+
     def tpr(mask):
         if mask.sum() == 0:
             return 0.0

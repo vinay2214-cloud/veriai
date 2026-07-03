@@ -32,6 +32,30 @@ Trust = alpha * truth + beta * (1 - bias) + gamma * confidence
 
 - Provides dashboard, reports, review queue, settings, demo scenarios, and PDF export.
 
+## AI-Native Operations
+
+VeriAI runs an **AI intelligence layer** on top of the audit engine so it operates like an
+AI-run governance service, not just a metrics dashboard. Every component has a
+**deterministic core that works with no API key** (demo-safe on Render's free tier) and
+never fabricates numbers; an LLM can optionally polish the prose when a key is present.
+
+- **AI Audit Orchestrator** — inspects an uploaded dataset and recommends the audit
+  profile, depth, compliance framework, explainability level and review priority, with a
+  one-click apply. `POST /api/ai/recommend-profile`
+- **AI Compliance Officer** — turns each audit into an executive summary, business-risk
+  narrative, framework mapping (EEOC, ECOA, EU AI Act, NIST AI RMF, GDPR), recommendations
+  and next actions; attached to every audit as `ai_summary` and available in full at
+  `GET /api/ai/compliance-report/{id}`.
+- **AI Review Manager** — prioritizes the human-review queue by severity, business impact
+  and urgency, and recommends a reviewer and action. `GET /api/ai/review-insights`
+- **Executive Insights** — business KPIs (trust/bias trends, compliance health, high-risk
+  volume, estimated analyst hours saved, overall business risk). `GET /api/insights/executive`
+
+See [`docs/AI_WORKFLOW.md`](docs/AI_WORKFLOW.md) and
+[`docs/BUSINESS_WORKFLOW.md`](docs/BUSINESS_WORKFLOW.md) for details. These additions are
+fully additive — the Trust Score formula, audit pipeline, and existing API contracts are
+unchanged.
+
 ## Demo Scenarios
 
 The public demo includes three pre-loaded scenarios:
@@ -186,6 +210,19 @@ curl -X POST http://127.0.0.1:8000/api/upload-csv \
 - Private dataset upload routes require JWT authentication.
 - Security headers, CORS allow-listing, request size limits, and API rate limits are applied by FastAPI middleware.
 - Client-side validation improves UX; server-side validation remains authoritative.
+
+## Roadmap
+
+- **Now (shipped):** end-to-end trust audits; AI Orchestrator / Compliance Officer /
+  Review Manager; Executive Insights; onboarding; PDF/JSON export; RLHF review loop.
+- **Next:** real multi-tenant auth + role-based dashboards; persistent organization
+  branding; saved custom compliance profiles; scheduled re-audits and drift alerts.
+- **Later:** billing/subscription tiers; SSO/SAML; connectors for model registries and
+  data warehouses; a hosted analytics store beyond demo-bounded SQLite; SOC 2 evidence
+  automation.
+
+See the Phase reports in [`docs/`](docs/) for the stability, performance, and business
+transformation history.
 
 ## License
 

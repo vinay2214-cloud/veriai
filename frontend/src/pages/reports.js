@@ -49,8 +49,110 @@ export async function renderReportsPage(rootEl, api, id = null) {
     }
 }
 
+const RISK_COLOR = {
+    critical: 'var(--accent-red)',
+    elevated: 'var(--accent-red)',
+    moderate: 'var(--accent-amber)',
+    low: 'var(--accent-emerald)',
+};
+
+const STATUS_STYLE = {
+    violation: { color: 'var(--accent-red)', label: '✕ Violation' },
+    attention: { color: 'var(--accent-amber)', label: '! Attention' },
+    pass: { color: 'var(--accent-emerald)', label: '✓ Pass' },
+};
+
+// Phase 3 — AI Compliance Officer section. Renders the consultant-grade narrative
+// returned by /api/ai/compliance-report/{id}. All dynamic values are escaped.
+function renderComplianceSection(resp) {
+    const c = resp && resp.compliance;
+    if (!c) return '';
+    const risk = c.risk_level || 'low';
+    const color = RISK_COLOR[risk] || 'var(--text-muted)';
+    const cv = c.customer_value || {};
+
+    const mappingRows = (c.compliance_mapping || []).map(m => {
+        const s = STATUS_STYLE[m.status] || { color: 'var(--text-muted)', label: escapeHtml(m.status || '') };
+        return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+            <td style="padding:10px 14px; color:var(--text-primary);">${escapeHtml(m.framework || '')}<div style="color:var(--text-muted); font-size:0.78rem; margin-top:2px;">${escapeHtml(m.reference || '')}</div></td>
+            <td style="padding:10px 14px; white-space:nowrap; font-weight:600; color:${s.color};">${s.label}</td>
+            <td style="padding:10px 14px; color:var(--text-secondary); font-size:0.88rem;">${escapeHtml(m.finding || '')}</td>
+        </tr>`;
+    }).join('');
+
+    const recs = (c.recommendations || []).map(r => `<li style="margin-bottom:0.5rem; color:var(--text-secondary);">${escapeHtml(r)}</li>`).join('');
+    const actions = (c.next_actions || []).map(a => `
+        <div style="display:flex; align-items:center; gap:0.75rem; padding:0.65rem 0.9rem; background:rgba(255,255,255,0.03); border:1px solid var(--border-glass); border-radius:var(--radius-sm); margin-bottom:0.5rem;">
+            <span class="badge ${a.urgency === 'immediate' ? 'badge-purple' : 'badge-cyan'}" style="text-transform:capitalize;">${escapeHtml(a.urgency || '')}</span>
+            <span style="color:var(--text-primary); flex:1;">${escapeHtml(a.action || '')}</span>
+            <span style="color:var(--text-muted); font-size:0.82rem;">${escapeHtml(a.owner || '')}</span>
+        </div>`).join('');
+
+    const valueRow = (label, val) => `
+        <div style="display:flex; flex-direction:column; gap:0.25rem; padding:0.75rem 1rem; background:rgba(0,0,0,0.2); border-radius:var(--radius-sm); border-left:3px solid ${color};">
+            <span style="color:var(--text-muted); font-size:0.78rem; text-transform:uppercase; letter-spacing:0.5px;">${escapeHtml(label)}</span>
+            <span style="color:var(--text-primary); font-size:0.92rem;">${escapeHtml(val || '—')}</span>
+        </div>`;
+
+    return `
+    <div class="card glass-card" style="box-shadow: var(--shadow-lg); margin-top:1.5rem;">
+        <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border-glass); padding-bottom:1rem;">
+            <h3 class="card-title" style="margin:0; display:flex; align-items:center; gap:0.75rem;">
+                🧑‍⚖️ AI Compliance Officer
+            </h3>
+            <span class="badge" style="background:${color}22; color:${color}; border:1px solid ${color}55; font-weight:600;">${escapeHtml(c.headline || '')}</span>
+        </div>
+
+        <div style="margin-top:1.5rem;">
+            <h4 style="color:var(--text-muted); font-size:0.85rem; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:0.5rem;">Executive Summary</h4>
+            <p style="color:var(--text-primary); line-height:1.65; margin-bottom:1.25rem;">${escapeHtml(c.executive_summary || '')}</p>
+            <h4 style="color:var(--text-muted); font-size:0.85rem; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:0.5rem;">Business Risk</h4>
+            <p style="color:var(--text-secondary); line-height:1.65;">${escapeHtml(c.business_risk_summary || '')}</p>
+        </div>
+
+        <div style="margin-top:1.5rem;">
+            <h4 style="color:var(--text-muted); font-size:0.85rem; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:0.75rem;">What this means for you</h4>
+            <div class="grid grid-3" style="gap:0.75rem;">
+                ${valueRow('What happened', cv.what)}
+                ${valueRow('Why', cv.why)}
+                ${valueRow('Business impact', cv.business_impact)}
+                ${valueRow('Compliance impact', cv.compliance_impact)}
+                ${valueRow('Recommended action', cv.recommended_action)}
+                ${valueRow('Who should review', cv.who_should_review)}
+            </div>
+        </div>
+
+        <div style="margin-top:1.5rem;">
+            <h4 style="color:var(--text-muted); font-size:0.85rem; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:0.75rem;">Compliance Mapping</h4>
+            <div class="table-wrap">
+                <table style="width:100%; border-collapse:collapse; font-size:0.9rem;">
+                    <thead><tr style="text-align:left; color:var(--text-muted); border-bottom:1px solid var(--border-glass);">
+                        <th style="padding:8px 14px;">Framework</th><th style="padding:8px 14px;">Status</th><th style="padding:8px 14px;">Finding</th>
+                    </tr></thead>
+                    <tbody>${mappingRows}</tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="grid grid-2" style="margin-top:1.5rem; gap:1.5rem;">
+            <div>
+                <h4 style="color:var(--text-muted); font-size:0.85rem; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:0.75rem;">Recommendations</h4>
+                <ul style="padding-left:1.1rem; margin:0;">${recs}</ul>
+            </div>
+            <div>
+                <h4 style="color:var(--text-muted); font-size:0.85rem; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:0.75rem;">Next Actions</h4>
+                ${actions}
+            </div>
+        </div>
+        <div style="margin-top:1rem; color:var(--text-muted); font-size:0.75rem; text-align:right;">Generated by ${escapeHtml(c.generated_by || 'VeriAI')} · ${escapeHtml(c.engine || 'deterministic')}</div>
+    </div>`;
+}
+
 async function renderSingleReport(rootEl, api, id) {
-    const report = await api.get(`/report/${id}`);
+    const [report, complianceResp] = await Promise.all([
+        api.get(`/report/${id}`),
+        api.get(`/ai/compliance-report/${id}`).catch(() => null),
+    ]);
     if (!report || report.error) {
         rootEl.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3 class="empty-title">Report not found</h3></div>`;
         return;
@@ -128,4 +230,7 @@ async function renderSingleReport(rootEl, api, id) {
             </div>
         </div>
     `;
+
+    // Phase 3 — append the AI Compliance Officer narrative below the score card.
+    rootEl.insertAdjacentHTML('beforeend', renderComplianceSection(complianceResp));
 }

@@ -19,7 +19,7 @@ from pathlib import Path
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
-from .routes import audit, feedback, dashboard, bias_scan, truth_check, correction, report, upload, ml, settings, review, llm_audit, datasets, demo_routes
+from .routes import audit, feedback, dashboard, bias_scan, truth_check, correction, report, upload, ml, settings, review, llm_audit, datasets, demo_routes, intelligence
 from .database import init_db
 from .sqlalchemy_db import init_sqlalchemy_models, close_engine
 from .seed_data import seed_database
@@ -178,6 +178,9 @@ app.include_router(review.router, prefix="/api", tags=["Review"])
 app.include_router(llm_audit.router, prefix="/api", tags=["LLM Audit"])
 app.include_router(demo_routes.router, tags=["Demo"])
 app.include_router(datasets.router, prefix="/api", tags=["Datasets"])
+# Phase 3 — additive AI intelligence layer (orchestrator / compliance officer /
+# review manager / executive insights). New paths only; no existing route changed.
+app.include_router(intelligence.router, prefix="/api", tags=["AI Intelligence"])
 
 #  HEALTH CHECK   (correct position)
 @app.get("/health", include_in_schema=False)

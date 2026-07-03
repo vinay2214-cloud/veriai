@@ -1,10 +1,12 @@
-import { renderLogin } from './pages/login.js?v=19';
-import { renderDashboard } from './pages/dashboard.js?v=19';
-import { renderAuditPage } from './pages/audit.js?v=19';
-import { renderReportsPage } from './pages/reports.js?v=19';
-import { renderFeedbackPage } from './pages/feedback.js?v=19';
-import { renderSettingsPage } from './pages/settings.js?v=19';
-import { renderReviewPage } from './pages/review.js?v=19';
+import { renderLogin } from './pages/login.js?v=23';
+import { renderDashboard } from './pages/dashboard.js?v=23';
+import { renderAuditPage } from './pages/audit.js?v=23';
+import { renderReportsPage } from './pages/reports.js?v=23';
+import { renderFeedbackPage } from './pages/feedback.js?v=23';
+import { renderSettingsPage } from './pages/settings.js?v=23';
+import { renderReviewPage } from './pages/review.js?v=23';
+import { renderInsightsPage } from './pages/insights.js?v=23';
+import { renderOnboardingPage } from './pages/onboarding.js?v=23';
 
 import { sanitizeText, safeRender } from './utils.js';
 import { showToast } from './security-utils.js';
@@ -174,8 +176,21 @@ export const apiClient = {
         showApiNotice(`API issue: ${lastError?.message || 'Request failed'}`);
         return null;
     },
+    // Phase 2 — in-flight GET deduplication. When the same GET endpoint is
+    // requested again while a previous identical request is still pending
+    // (e.g. a page re-render), share the in-flight promise instead of issuing a
+    // second network call. Behavior-preserving (identical response) and reduces
+    // duplicate parallel bursts against Render. The entry clears as soon as the
+    // request settles, so later GETs always fetch fresh data.
+    _inflightGets: new Map(),
     async get(endpoint) {
-        return this.request(endpoint);
+        const pending = this._inflightGets.get(endpoint);
+        if (pending) return pending;
+        const promise = this.request(endpoint).finally(() => {
+            this._inflightGets.delete(endpoint);
+        });
+        this._inflightGets.set(endpoint, promise);
+        return promise;
     },
     async post(endpoint, data) {
         return this.request(endpoint, {
@@ -196,6 +211,8 @@ export const apiClient = {
 const routes = {
     '/': { render: renderLogin, title: 'Login - VeriAI' },
     '/dashboard': { render: renderDashboard, title: 'Dashboard' },
+    '/insights': { render: renderInsightsPage, title: 'Executive Insights' },
+    '/onboarding': { render: renderOnboardingPage, title: 'Get Started' },
     '/audit': { render: renderAuditPage, title: 'Run Audit' },
     '/reports': { render: renderReportsPage, title: 'Audit Reports' },
     '/feedback': { render: renderFeedbackPage, title: 'Feedback' },
@@ -281,7 +298,6 @@ async function router() {
 }
 
 // Init
-console.log('[VeriAI] Module loaded. Hash:', window.location.hash);
 initMobileNavigation();
 window.addEventListener('hashchange', router);
 // For ES modules (deferred), DOMContentLoaded may have already fired.

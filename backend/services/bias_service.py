@@ -5,9 +5,9 @@ from typing import Dict, List, Tuple, Any
 
 import numpy as np
 import pandas as pd
-from sklearn.inspection import permutation_importance
-from sklearn.linear_model import LogisticRegression
 
+# sklearn is imported lazily inside the functions that need it (Phase 2 startup
+# optimization) so importing this module at app startup stays cheap.
 from .fairness_service import demographic_parity, equal_opportunity
 from .training_service import APP_STATE, get_live_model, load_data, preprocess_data, train_model
 
@@ -99,6 +99,9 @@ def auto_mitigate() -> dict:
 
 def feature_importance(X: np.ndarray, y: np.ndarray, feature_names: List[str]) -> Dict[str, float]:
     """Train a simple logistic regression model and compute permutation importance."""
+    from sklearn.inspection import permutation_importance
+    from sklearn.linear_model import LogisticRegression
+
     model = LogisticRegression(max_iter=200, solver="liblinear")
     model.fit(X, y)
     result = permutation_importance(model, X, y, n_repeats=5, random_state=0)
@@ -199,6 +202,8 @@ def compute_bias_score(
     feature_names: List[str],
 ) -> Tuple[float, Dict[str, float], float, float]:
     """Compute bias score from demographic parity + equal opportunity."""
+    from sklearn.linear_model import LogisticRegression
+
     protected = X[:, protected_idx]
     protected_binary = pd.factorize(pd.Series(protected).astype(str), sort=True)[0]
     protected_name = feature_names[protected_idx] if 0 <= protected_idx < len(feature_names) else "protected_attribute"

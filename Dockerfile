@@ -14,14 +14,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app
 
+# Phase 2 — runtime apt libs trimmed. The Cairo/Pango/gdk-pixbuf stack was a
+# leftover from an earlier HTML/SVG-to-PDF path; PDF export now uses reportlab
+# (pure Python), and no module imports cairo, pango, or gdk-pixbuf. libffi-dev
+# is a build-time headers package, not a runtime dependency. Removing them
+# shrinks the image and speeds the apt layer. libmagic1 is kept for MIME
+# sniffing in the upload validators.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        libcairo2 \
-        libffi-dev \
-        libgdk-pixbuf-2.0-0 \
         libmagic1 \
-        libpango-1.0-0 \
-        libpangocairo-1.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages

@@ -1,17 +1,21 @@
 from typing import Dict, List
 
 import numpy as np
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
 
+# sklearn is imported lazily inside compare_models (Phase 2 startup
+# optimization) so this module — pulled in by the dashboard router at startup —
+# does not force sklearn to load before the app can serve health checks.
 from .fairness_service import demographic_parity, equal_opportunity
 from .training_service import load_data, preprocess_data
 
 
 def compare_models() -> Dict[str, List[Dict]]:
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.metrics import accuracy_score
+    from sklearn.model_selection import train_test_split
+    from sklearn.preprocessing import StandardScaler
+
     df = load_data()
     X, y, feature_names = preprocess_data(df)
     protected = np.where(df["sex"].str.strip() == "Female", 1, 0)

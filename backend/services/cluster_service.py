@@ -3,13 +3,16 @@
 Provides KMeans clustering on feature vectors and per‑cluster bias metrics.
 """
 import numpy as np
-from sklearn.cluster import KMeans
 from typing import List, Dict, Tuple
+
+# KMeans is imported lazily inside cluster_features (Phase 2 startup optimization).
 
 def cluster_features(X: np.ndarray, n_clusters: int = 4) -> Tuple[np.ndarray, np.ndarray]:
     """Run KMeans on the feature matrix X.
     Returns a tuple (labels, centroids).
     """
+    from sklearn.cluster import KMeans
+
     numeric_df = np.asarray(X, dtype=float)
     numeric_df = np.nan_to_num(numeric_df, nan=0.0, posinf=0.0, neginf=0.0)
     kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init='auto')

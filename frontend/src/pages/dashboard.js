@@ -1,12 +1,17 @@
 import { escapeHtml, formatDate } from '../utils.js';
 
 export async function renderDashboard(rootEl, api) {
-    const stats = await api.get('/dashboard/stats').catch(() => null);
-    const biasData = await api.get('/bias').catch(() => ({ bias_score: 0, p_y_given_male: 0, p_y_given_female: 0 }));
-    const fairnessData = await api.get('/fairness').catch(() => ({ demographic_parity: 0, equal_opportunity: 0 }));
-    const recent = await api.get('/dashboard/recent').catch(() => []);
-    const reviewStats = await api.get('/review/stats').catch(() => ({ pending: 0, approved: 0, rejected: 0 }));
-    const driftData = await api.get('/dashboard/fairness-drift').catch(() => ({ status: 'stable', drift_delta: 0, points: [] }));
+    // Phase 2 — these six dashboard endpoints are independent, so fetch them
+    // concurrently instead of sequentially. On Render this replaces six serial
+    // round-trips with one parallel batch (same data, same per-call fallbacks).
+    const [stats, biasData, fairnessData, recent, reviewStats, driftData] = await Promise.all([
+        api.get('/dashboard/stats').catch(() => null),
+        api.get('/bias').catch(() => ({ bias_score: 0, p_y_given_male: 0, p_y_given_female: 0 })),
+        api.get('/fairness').catch(() => ({ demographic_parity: 0, equal_opportunity: 0 })),
+        api.get('/dashboard/recent').catch(() => []),
+        api.get('/review/stats').catch(() => ({ pending: 0, approved: 0, rejected: 0 })),
+        api.get('/dashboard/fairness-drift').catch(() => ({ status: 'stable', drift_delta: 0, points: [] })),
+    ]);
     const modelComparison = { models: [] };
 
     const s = stats || { total_audits: 0, avg_trust: 0, avg_bias: 0, avg_truth: 0, total_feedback: 0 };
@@ -303,7 +308,7 @@ async function handleAction(api, action) {
 }
 
 async function refreshMetrics(api) {
-    const b = await api.get('/bias'), f = await api.get('/fairness');
+    const [b, f] = await Promise.all([api.get('/bias'), api.get('/fairness')]);
     const set = (id, t) => { const e = document.getElementById(id); if(e) { e.style.opacity='0.3'; setTimeout(() => { e.textContent=t; e.style.opacity='1'; }, 150); } };
     if (b) { set('live-bias-value', (b.bias_score*100).toFixed(1)+'%'); set('pmale-value', (b.p_y_given_male*100).toFixed(1)+'%'); }
     if (f) { set('dp-value', (f.demographic_parity*100).toFixed(1)+'%'); set('eo-value', (f.equal_opportunity*100).toFixed(1)+'%'); }

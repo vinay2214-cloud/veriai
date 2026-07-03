@@ -90,6 +90,19 @@ AUDIT_COLUMNS = {
     "column_mapping": "TEXT",
 }
 
+# Phase 2 — indexes backing the hot read/prune paths. These are additive (no
+# schema redesign): dashboards/reports order audits by created_at, the review
+# queue filters by status and looks up by audit_id, and feedback/logs join on
+# audit_id. `IF NOT EXISTS` makes creation idempotent on every startup.
+INDEXES = (
+    "CREATE INDEX IF NOT EXISTS idx_audits_created_at ON audits(created_at DESC);",
+    "CREATE INDEX IF NOT EXISTS idx_review_queue_status ON review_queue(status);",
+    "CREATE INDEX IF NOT EXISTS idx_review_queue_audit_id ON review_queue(audit_id);",
+    "CREATE INDEX IF NOT EXISTS idx_review_queue_created_at ON review_queue(created_at DESC);",
+    "CREATE INDEX IF NOT EXISTS idx_feedback_audit_id ON feedback(audit_id);",
+    "CREATE INDEX IF NOT EXISTS idx_logs_audit_id ON logs(audit_id);",
+)
+
 async def init_db() -> None:
     """Create tables if they do not exist.
     Called from FastAPI startup event.
@@ -106,6 +119,8 @@ async def init_db() -> None:
                 await db.execute(f"ALTER TABLE audits ADD COLUMN {col} {col_type};")
             except aiosqlite.OperationalError:
                 pass
+        for index_stmt in INDEXES:
+            await db.execute(index_stmt)
         await db.commit()
 
 # ---------------------------------------------------------------------------

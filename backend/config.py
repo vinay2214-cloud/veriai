@@ -147,6 +147,67 @@ LOG_LEVEL = os.getenv("VERIAI_LOG_LEVEL", "INFO")
 HUMAN_REVIEW_THRESHOLD = float(os.getenv("VERIAI_REVIEW_THRESHOLD", "0.60"))
 
 # ---------------------------------------------------------------------------
+# Phase 3 — AI intelligence layer (business/compliance narratives & analytics)
+# ---------------------------------------------------------------------------
+# Additive constants only. These power the deterministic "AI" services
+# (orchestrator / compliance officer / review manager / business metrics) that
+# turn raw audit metrics into business output. Nothing here changes the trust
+# formula or any existing behavior.
+
+# Estimated analyst time saved per automated audit, in minutes. Basis: a manual
+# fairness + factual review of a single model output/dataset by a compliance
+# analyst (data prep, metric computation, write-up) is conservatively ~4 hours.
+# This is a transparent, configurable ESTIMATE — always surfaced to users as an
+# estimate, never presented as a measured fact. Override via env for a customer's
+# own baseline.
+MANUAL_AUDIT_MINUTES = int(os.getenv("VERIAI_MANUAL_AUDIT_MINUTES", "240"))
+
+# Trust-score bands (0..1) used consistently across the AI narratives, review
+# prioritization and executive insights so "risk level" means the same thing
+# everywhere. Aligned with the existing HUMAN_REVIEW_THRESHOLD (0.60).
+TRUST_BANDS = {
+    "critical": 0.50,   # < 0.50  → critical business/compliance risk
+    "elevated": 0.60,   # < 0.60  → elevated risk (also the human-review line)
+    "moderate": 0.75,   # < 0.75  → moderate risk
+    # >= 0.75 → low risk
+}
+
+# Named compliance frameworks the AI Compliance Officer maps findings against.
+# Metadata only — used to render consistent, consultant-grade compliance mapping.
+COMPLIANCE_FRAMEWORKS = {
+    "eeoc": {
+        "name": "EEOC / Title VII (US employment)",
+        "reference": "EEOC §1691, 29 CFR 1607 (four-fifths rule)",
+        "domain": "hiring",
+    },
+    "ecoa": {
+        "name": "ECOA / Regulation B (US fair lending)",
+        "reference": "ECOA 15 U.S.C. §1691",
+        "domain": "finance",
+    },
+    "eu_ai_act": {
+        "name": "EU AI Act (high-risk AI systems)",
+        "reference": "Regulation (EU) 2024/1689, Art. 10 (data governance)",
+        "domain": "general",
+    },
+    "nist_ai_rmf": {
+        "name": "NIST AI Risk Management Framework",
+        "reference": "NIST AI 100-1 (Measure / Manage functions)",
+        "domain": "general",
+    },
+    "gdpr": {
+        "name": "GDPR automated decision-making",
+        "reference": "Regulation (EU) 2016/679, Art. 22",
+        "domain": "general",
+    },
+    "who": {
+        "name": "WHO / clinical safety",
+        "reference": "WHO Essential Medicines & clinical-guidance integrity",
+        "domain": "healthcare",
+    },
+}
+
+# ---------------------------------------------------------------------------
 # Helper utilities (optional)
 # ---------------------------------------------------------------------------
 def get_db_path() -> str:

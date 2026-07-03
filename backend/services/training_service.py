@@ -3,16 +3,15 @@ Provides real model training pipeline for the Adult dataset.
 Includes load caching, preprocessing, SGD online training, evaluation, bias mitigation, saving, and loading.
 """
 import os
-import joblib
 import pandas as pd
 import numpy as np
 from typing import Dict, Any
 
-from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import SGDClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
-
+# NOTE (Phase 2 — startup optimization): sklearn and joblib are heavy imports
+# (~90 MB RSS, ~0.9 s import). They are only needed when a model is trained,
+# loaded, or scored — never at process startup. Importing them lazily inside
+# the functions that use them keeps the FastAPI cold-start fast and the idle
+# health-check memory footprint low, without changing any behavior.
 from ..config import DB_PATH
 import aiosqlite
 
@@ -75,6 +74,12 @@ def preprocess_data(df: pd.DataFrame):
 def train_model(sample_weight: np.ndarray = None) -> Dict[str, Any]:
     """Train a SGDClassifier model on the Adult dataset and save it."""
     try:
+        import joblib
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.linear_model import SGDClassifier
+        from sklearn.model_selection import train_test_split
+        from sklearn.metrics import accuracy_score
+
         df = load_data()
         X, y, feature_names = preprocess_data(df)
         
@@ -123,7 +128,8 @@ def _load_model_dict() -> Dict[str, Any]:
         
     if not os.path.exists(MODEL_PATH):
         raise FileNotFoundError("Model not found. Please train it first.")
-        
+
+    import joblib
     state = joblib.load(MODEL_PATH)
     APP_STATE["model"] = state["model"]
     APP_STATE["scaler"] = state["scaler"]

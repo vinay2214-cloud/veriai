@@ -1,17 +1,63 @@
+# Phase 2 — build-context hardening.
+# Docker matches bare names (e.g. `venv`) only at the context root, so the
+# previous list did NOT exclude nested artifacts like backend/venv (~450 MB),
+# backend/__pycache__, or backend/.pytest_cache — all of which were pulled in by
+# `COPY backend/`. The `**/` patterns below exclude them at any depth, keeping
+# the build context (and image) minimal.
 .git
+.gitignore
+.github
+
+# Python bytecode / caches (any depth)
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.pytest_cache
 .pytest_cache
 __pycache__
-*.pyc
-*.pyo
-*.pyd
-.DS_Store
+
+# Virtual environments (any depth)
+**/venv
+**/.venv
 venv
+.venv
+env
+backend/venv
+backend/.venv
+
+# Node
+**/node_modules
 node_modules
 frontend/node_modules
-veriai.db
+
+# Databases / local state
 *.db
+*.db-*
 *.sqlite
 *.sqlite3
+veriai.db
+**/datasets
+data/datasets
+
+# Secrets / env
 .env
 .env.*
+
+# Tests (not needed in the runtime image)
+backend/tests
+backend/test_*.py
+backend/*/test_*.py
+
+# Docs / dev tooling / scratch
+docs
+scripts
+*.md
+!README.md
+.cursorrules
+.vscode
+.DS_Store
+**/.DS_Store
+
+# Model temp files
 backend/models/*.tmp

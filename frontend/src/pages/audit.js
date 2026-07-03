@@ -147,6 +147,33 @@ Example JSON: {"features": [[1,5,3,50],[0,2,4,30]], "labels": [1,0], "protected_
                     + '<div style="font-size:0.72rem; color:var(--text-muted); margin-top:0.5rem;">Columns: <strong>' + escapeHtml(data.columns.join(', ')) + '</strong></div>'
                     + '<div style="font-size:0.72rem; color:var(--accent-cyan); margin-top:0.3rem;">👉 Click <strong>"Run Full Audit"</strong> below to run the 8-step pipeline on this dataset.</div>'
                     + '</div>';
+
+                // Phase 3 — AI Audit Orchestrator: recommend a full audit config from
+                // the dataset's shape, with one-click apply into the existing depth
+                // control. Best-effort: any failure just leaves the manual controls.
+                try {
+                    const schema = { row_count: data.rows || 0, columns: (data.columns || []).map(n => ({ name: n, type: 'feature' })) };
+                    const rec = await api.post('/ai/recommend-profile', schema);
+                    if (rec) {
+                        const rlist = (rec.rationale || []).slice(0, 3).map(r => '<li style="margin-bottom:0.2rem;">' + escapeHtml(r) + '</li>').join('');
+                        csvStatus.insertAdjacentHTML('beforeend',
+                            '<div style="margin-top:0.6rem; padding:0.85rem; background:rgba(139,92,246,0.08); border:1px solid rgba(139,92,246,0.25); border-radius:6px;">'
+                            + '<div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:wrap;">'
+                            + '<div style="font-size:0.82rem; font-weight:600; color:var(--accent-purple);">🧭 AI Orchestrator recommends: ' + escapeHtml(rec.audit_profile || '') + '</div>'
+                            + '<button id="apply-reco-btn" style="background:var(--accent-purple); color:#fff; border:none; padding:0.4rem 0.9rem; border-radius:6px; cursor:pointer; font-size:0.78rem; font-weight:600;">Apply ' + escapeHtml((rec.depth || '').toUpperCase()) + ' depth</button>'
+                            + '</div>'
+                            + '<div style="font-size:0.74rem; color:var(--text-secondary); margin-top:0.4rem;">' + escapeHtml(rec.summary || '') + '</div>'
+                            + '<ul style="font-size:0.72rem; color:var(--text-muted); margin:0.4rem 0 0; padding-left:1.1rem;">' + rlist + '</ul>'
+                            + '</div>');
+                        const applyBtn = document.getElementById('apply-reco-btn');
+                        if (applyBtn) applyBtn.addEventListener('click', () => {
+                            const target = document.querySelector('.depth-btn[data-depth="' + (rec.depth || 'standard') + '"]');
+                            if (target) target.click();
+                            applyBtn.textContent = '✓ Applied';
+                            applyBtn.disabled = true;
+                        });
+                    }
+                } catch (_) { /* recommendation is best-effort */ }
             } else {
                 csvStatus.innerHTML = '<div style="font-size:0.78rem; color:var(--accent-red); margin-top:0.5rem;">Failed: ' + escapeHtml((data && (data.detail || data.error)) || 'Unknown error') + '</div>';
             }

@@ -1,9 +1,18 @@
 import { escapeHtml } from '../utils.js';
 
 export async function renderReviewPage(rootEl, api) {
-    const queue = await api.get('/review/queue');
-    const items = queue || [];
-    const reviewStats = await api.get('/review/stats');
+    // Phase 3 — pull the AI-prioritized, enriched queue (a superset of
+    // /review/queue, each item carrying an `ai_review` block) plus stats
+    // concurrently. Fall back to the raw queue if the AI endpoint is unavailable,
+    // so the page behaves exactly as before in the worst case.
+    const [insights, reviewStats] = await Promise.all([
+        api.get('/ai/review-insights').catch(() => null),
+        api.get('/review/stats'),
+    ]);
+    let items = (insights && Array.isArray(insights.queue)) ? insights.queue : null;
+    if (!items) {
+        items = (await api.get('/review/queue')) || [];
+    }
     const totalReviewed = reviewStats ? ((reviewStats.approved || 0) + (reviewStats.rejected || 0) + (reviewStats.escalated || 0)) : 0;
     const pendingCount = items.filter(i => i.status === 'pending').length;
 
@@ -59,6 +68,24 @@ export async function renderReviewPage(rootEl, api) {
     });
 
     if (items.length > 0) bindReviewActions(api, items[0], items, 0);
+}
+
+const AISEV_COLOR = { critical: 'var(--accent-red)', high: 'var(--accent-red)', medium: 'var(--accent-amber)', low: 'var(--accent-emerald)' };
+
+// Phase 3 — AI Review Manager guidance block (severity/urgency/impact/reviewer/action).
+function renderAiReview(ai) {
+    const color = AISEV_COLOR[ai.severity] || 'var(--text-muted)';
+    const row = (label, val) => '<div style="display:flex; gap:0.5rem; margin-bottom:0.35rem;"><span style="color:var(--text-muted); min-width:150px; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.04em;">' + label + '</span><span style="color:var(--text-primary); font-size:0.82rem;">' + escapeHtml(val || '') + '</span></div>';
+    return '<div style="background:' + color + '12; border:1px solid ' + color + '44; border-radius:var(--radius-md); padding:1rem; margin-bottom:1.25rem;">' +
+        '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">' +
+        '<h4 style="font-size:0.82rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; margin:0;">🤖 AI Review Manager</h4>' +
+        '<span style="background:' + color + '; color:#fff; font-size:0.68rem; font-weight:700; padding:2px 10px; border-radius:6px; text-transform:capitalize;">' + escapeHtml(ai.severity || '') + ' priority</span>' +
+        '</div>' +
+        row('Urgency', ai.urgency) +
+        row('Business impact', ai.business_impact) +
+        row('Recommended reviewer', ai.recommended_reviewer) +
+        row('Recommended action', ai.recommended_action) +
+        '</div>';
 }
 
 function buildDetailPanel(item) {
@@ -120,6 +147,9 @@ function buildDetailPanel(item) {
                 </div>
             </div>
         </div>
+
+        <!-- Phase 3 — AI Review Manager guidance -->
+        ${item.ai_review ? renderAiReview(item.ai_review) : ''}
 
         <!-- What Was Audited -->
         <div style="margin-bottom:1.25rem;">

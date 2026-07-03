@@ -7,10 +7,25 @@ from ..models import AuditRequest
 from ..services.reasoning_chain import run_audit
 from ..services.truth_service import invalidate_cache
 from ..services.csv_mapping_service import read_csv_bytes, infer_csv_schema, build_mapped_dataset
+from ..services import compliance_officer
 from .. import database as db
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _attach_ai_summary(result: dict) -> dict:
+    """Phase 3 — attach the deterministic AI business/compliance narrative to an
+    audit result (Task 8). Additive: adds one 'ai_summary' key, never mutates
+    existing keys. Uses the deterministic core only (no LLM) so audit latency is
+    unchanged; the LLM-polished version is available on demand via
+    GET /api/ai/compliance-report/{id}. Best-effort: any failure leaves the audit
+    result exactly as it was."""
+    try:
+        result["ai_summary"] = compliance_officer.summarize(result)
+    except Exception:
+        logger.exception("Failed to attach ai_summary for %s", result.get("audit_id"))
+    return result
 
 
 @router.post("/audit")
@@ -56,6 +71,8 @@ async def audit(request: AuditRequest):
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+    result = _attach_ai_summary(result)
 
     # Persist to SQLite. A DB hiccup must not discard an already-completed audit.
     try:
@@ -130,6 +147,7 @@ async def run_mapped_audit(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     result["column_mapping"] = normalized_mapping
+    result = _attach_ai_summary(result)
 
     try:
         await db.insert_audit(
