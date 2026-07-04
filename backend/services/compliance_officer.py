@@ -22,10 +22,9 @@ from typing import Any, Dict, List, Optional
 
 from ..config import TRUST_BANDS, COMPLIANCE_FRAMEWORKS
 
-try:  # optional, only used for the on-demand llm_polish path
-    from litellm import completion
-except Exception:  # pragma: no cover
-    completion = None
+# NOTE: litellm is imported lazily inside _maybe_llm_polish (not at module top),
+# so importing this module — which the audit router pulls in at startup — never
+# loads litellm. This preserves the Phase 2 lightweight-startup guarantee.
 
 
 # ---------------------------------------------------------------------------
@@ -311,7 +310,11 @@ def _customer_value(scores: Dict[str, Any], risk: str) -> Dict[str, str]:
 # ---------------------------------------------------------------------------
 def _maybe_llm_polish(result: Dict[str, Any], scores: Dict[str, Any]) -> Dict[str, Any]:
     api_key = os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY") or os.getenv("GEMINI_API_KEY")
-    if completion is None or not api_key:
+    if not api_key:
+        return result
+    try:
+        from litellm import completion  # lazy: only when a key is configured
+    except Exception:
         return result
     try:
         model = os.getenv("LLM_MODEL", "gpt-4o-mini")

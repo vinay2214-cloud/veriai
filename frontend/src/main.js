@@ -1,12 +1,12 @@
-import { renderLogin } from './pages/login.js?v=23';
-import { renderDashboard } from './pages/dashboard.js?v=23';
-import { renderAuditPage } from './pages/audit.js?v=23';
-import { renderReportsPage } from './pages/reports.js?v=23';
-import { renderFeedbackPage } from './pages/feedback.js?v=23';
-import { renderSettingsPage } from './pages/settings.js?v=23';
-import { renderReviewPage } from './pages/review.js?v=23';
-import { renderInsightsPage } from './pages/insights.js?v=23';
-import { renderOnboardingPage } from './pages/onboarding.js?v=23';
+import { renderLogin } from './pages/login.js?v=24';
+import { renderDashboard } from './pages/dashboard.js?v=24';
+import { renderAuditPage } from './pages/audit.js?v=24';
+import { renderReportsPage } from './pages/reports.js?v=24';
+import { renderFeedbackPage } from './pages/feedback.js?v=24';
+import { renderSettingsPage } from './pages/settings.js?v=24';
+import { renderReviewPage } from './pages/review.js?v=24';
+import { renderInsightsPage } from './pages/insights.js?v=24';
+import { renderOnboardingPage } from './pages/onboarding.js?v=24';
 
 import { sanitizeText, safeRender } from './utils.js';
 import { showToast } from './security-utils.js';
@@ -39,6 +39,16 @@ const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 504]);
 const SAFE_RETRY_METHODS = new Set(['GET', 'HEAD']);
 const MAX_REQUEST_RETRIES = 1;
 const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
+// Audits (especially the first, cold audit on Render Free, or a thorough audit)
+// legitimately run longer than 30s. Aborting them client-side discards a result the
+// server actually produced. Give audit/upload endpoints a much longer budget so valid
+// long-running requests are never cut off prematurely.
+const LONG_RUNNING_TIMEOUT_MS = 180000;
+const LONG_RUNNING_PATTERNS = [/^\/audit(?:\b|\/|$)/, /run-audit/, /\/demo\//, /\/upload-csv/];
+
+function timeoutForEndpoint(endpoint) {
+    return LONG_RUNNING_PATTERNS.some((re) => re.test(endpoint)) ? LONG_RUNNING_TIMEOUT_MS : DEFAULT_REQUEST_TIMEOUT_MS;
+}
 
 function getRequestMethod(options = {}) {
     return String(options.method || 'GET').toUpperCase();
@@ -78,11 +88,11 @@ function shouldRetryFetchError(error, options, attempt) {
     return error instanceof TypeError;
 }
 
-function withRequestTimeout(options = {}) {
+function withRequestTimeout(options = {}, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS) {
     if (options.signal || typeof AbortSignal === 'undefined' || typeof AbortSignal.timeout !== 'function') {
         return options;
     }
-    return { ...options, signal: AbortSignal.timeout(DEFAULT_REQUEST_TIMEOUT_MS) };
+    return { ...options, signal: AbortSignal.timeout(timeoutMs) };
 }
 
 function initMobileNavigation() {
@@ -146,9 +156,16 @@ async function parseResponse(res) {
 export const apiClient = {
     async request(endpoint, options = {}) {
         let lastError = null;
+        const timeoutMs = timeoutForEndpoint(endpoint);
+        // Fail fast and clearly when the browser is offline — no hanging, no silent
+        // null. The user gets an actionable message instead of a timeout later.
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+            showApiNotice('You appear to be offline. Reconnect and try again.');
+            return null;
+        }
         for (let attempt = 0; attempt <= MAX_REQUEST_RETRIES; attempt += 1) {
             try {
-                const res = await fetch(`${API_BASE}${endpoint}`, withRequestTimeout(options));
+                const res = await fetch(`${API_BASE}${endpoint}`, withRequestTimeout(options, timeoutMs));
                 const payload = await parseResponse(res);
                 if (!res.ok) {
                     if (shouldRetryResponse(res, options, attempt)) {
@@ -166,7 +183,10 @@ export const apiClient = {
                     continue;
                 }
                 if (error?.name === 'AbortError') {
-                    showApiNotice('Audit is taking longer than expected. Please retry in a moment.');
+                    const isAudit = LONG_RUNNING_PATTERNS.some((re) => re.test(endpoint));
+                    showApiNotice(isAudit
+                        ? 'This audit took longer than expected and timed out. Please try again, or use a lighter audit depth.'
+                        : 'The request timed out. Please check your connection and try again.');
                     return null;
                 }
                 break;

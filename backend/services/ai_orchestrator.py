@@ -18,20 +18,48 @@ from typing import Any, Dict, List
 
 # Sensitive-domain keyword signals. Matching is done on lower-cased column names.
 # Each hit contributes evidence toward a compliance profile + protected attributes.
+# VeriAI stays domain-AGNOSTIC: these signals only influence recommendations,
+# compliance framework, and report wording — never the audit engine or weighting math.
 _DOMAIN_SIGNALS = {
     "hiring": [
         "gender", "sex", "race", "ethnicity", "age", "disability", "veteran",
         "applicant", "candidate", "hire", "hired", "interview", "resume",
-        "education", "salary", "promotion",
+        "promotion",
     ],
     "finance": [
         "loan", "credit", "mortgage", "income", "debt", "default", "fico",
-        "zip", "zipcode", "postal", "collateral", "approval", "lending",
+        "collateral", "approval", "lending", "transaction",
     ],
     "healthcare": [
         "patient", "diagnosis", "drug", "dose", "dosage", "treatment", "clinical",
         "disease", "symptom", "mortality", "readmission", "icd", "medical",
     ],
+    "insurance": [
+        "premium", "claim", "policyholder", "underwrit", "actuarial", "coverage",
+        "deductible", "insured", "risk_score", "peril",
+    ],
+    "education": [
+        "student", "grade", "gpa", "admission", "enrollment", "scholarship",
+        "school", "graduation", "test_score", "tuition",
+    ],
+    "government": [
+        "benefit", "eligibility", "citizen", "welfare", "tax", "permit",
+        "applicant_id", "case_id", "public", "constituent",
+    ],
+}
+
+# Domain → (weighting preset key that already exists in config.INDUSTRY_PRESETS,
+# primary compliance framework label). The preset keeps the audit ENGINE untouched
+# (new domains reuse an existing, validated weight profile); the framework label is
+# used only for recommendation + report wording.
+DOMAIN_PROFILES = {
+    "hiring":     {"preset": "hiring",     "framework": "EEOC / Title VII (employment fairness)"},
+    "finance":    {"preset": "finance",    "framework": "ECOA / Fair Lending (Regulation B)"},
+    "healthcare": {"preset": "healthcare", "framework": "HIPAA / clinical safety & FDA SaMD guidance"},
+    "insurance":  {"preset": "finance",    "framework": "NAIC model bulletin / fair pricing & underwriting"},
+    "education":  {"preset": "general",    "framework": "FERPA / equal educational access"},
+    "government": {"preset": "general",    "framework": "OMB M-24-10 / algorithmic accountability"},
+    "general":    {"preset": "general",    "framework": "EU AI Act & NIST AI RMF (general governance)"},
 }
 
 # Column names that, regardless of domain, denote a legally protected attribute.
@@ -100,19 +128,23 @@ def recommend_audit_profile(schema: Dict[str, Any]) -> Dict[str, Any]:
             "a standard audit (bias, truth, cluster and distribution analysis)."
         )
 
-    # --- Compliance profile: map detected domain to an existing preset ---------
+    # --- Compliance profile: map detected domain to an EXISTING weight preset ---
+    # The audit engine is untouched — new domains reuse a validated preset; only the
+    # framework label + wording are domain-specific.
+    effective_domain = top_domain if has_domain_signal else "general"
+    domain_profile = DOMAIN_PROFILES.get(effective_domain, DOMAIN_PROFILES["general"])
+    compliance_profile = domain_profile["preset"]
+    compliance_framework = domain_profile["framework"]
     if has_domain_signal:
-        compliance_profile = top_domain
         rationale.append(
-            f"Column names indicate a {top_domain} use case "
-            f"({domain_scores[top_domain]} domain signal(s)); applying the {top_domain} "
-            "compliance weighting preset."
+            f"Column names indicate a {effective_domain} use case "
+            f"({domain_scores[top_domain]} domain signal(s)); primary framework: "
+            f"{compliance_framework}. Applying the '{compliance_profile}' weighting preset."
         )
     else:
-        compliance_profile = "general"
         rationale.append(
             "No strong domain signal detected in the column names; using the general-purpose "
-            "compliance preset."
+            "compliance preset and governance frameworks (EU AI Act, NIST AI RMF)."
         )
 
     # --- Explainability level: driven by protected-attribute exposure ----------
@@ -144,8 +176,10 @@ def recommend_audit_profile(schema: Dict[str, Any]) -> Dict[str, Any]:
     report_detail = "executive" if has_domain_signal or protected else "standard"
 
     # --- Overall audit profile label (human-facing summary) --------------------
-    if compliance_profile != "general":
-        audit_profile = f"{compliance_profile.title()} Compliance Audit"
+    # Label uses the specific detected domain (e.g. Insurance) even though the
+    # underlying weight preset may reuse an existing profile.
+    if has_domain_signal:
+        audit_profile = f"{effective_domain.title()} Compliance Audit"
     elif protected:
         audit_profile = "Fairness-Focused Audit"
     else:
@@ -154,12 +188,14 @@ def recommend_audit_profile(schema: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "audit_profile": audit_profile,
         "depth": depth,
-        "compliance_profile": compliance_profile,
+        "compliance_profile": compliance_profile,   # existing preset key (engine-safe)
+        "compliance_framework": compliance_framework,
         "explainability_level": explainability_level,
         "review_priority": review_priority,
         "report_detail": report_detail,
         "detected_protected_attributes": protected,
-        "detected_domain": top_domain if has_domain_signal else "general",
+        "detected_domain": effective_domain,
+        "supported_domains": list(DOMAIN_PROFILES.keys()),
         "rationale": rationale,
         "engine": "deterministic",
         "summary": (

@@ -1641,3 +1641,48 @@ tr:hover td { background: rgba(167, 139, 250, 0.04); }
 @media (max-width:700px) {
   .dv-top-row, .dv-bot-row { grid-template-columns:1fr; }
 }
+
+/* ---------------------------------------------------------------------------
+   Accessibility (Production Polish) — skip link + visible keyboard focus.
+   Additive only; does not alter existing visual design for mouse users.
+   --------------------------------------------------------------------------- */
+.skip-link {
+  position: absolute;
+  left: -999px;
+  top: 0;
+  z-index: 1000;
+  padding: 0.6rem 1rem;
+  background: var(--accent-blue, #3b82f6);
+  color: #fff;
+  border-radius: 0 0 8px 0;
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+.skip-link:focus {
+  left: 0;
+}
+
+/* Visible focus ring for keyboard users (mouse clicks stay unaffected via
+   :focus-visible). Applies to interactive elements across the app. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible,
+.nav-item:focus-visible,
+.depth-btn:focus-visible,
+.queue-item:focus-visible {
+  outline: 2px solid var(--accent-cyan, #06b6d4);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Respect reduced-motion preferences for the ambient/transition-heavy UI. */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

@@ -209,36 +209,40 @@ Example JSON: {"features": [[1,5,3,50],[0,2,4,30]], "labels": [1,0], "protected_
         const btn = document.getElementById('run-audit-btn');
         btn.disabled = true;
         btn.textContent = '⏳ Running ' + selectedDepth + ' audit...';
-        const steps = ['Bias Detection', 'Truth Verification', 'Cluster Analysis', 'Distribution Analysis', 'Trust Scoring', 'Auto-Correction', 'SHAP Explainability', 'Human Review'];
+        // Honest progress: show the stages this depth WILL run (no fake per-step
+        // completion on a timer) plus a real elapsed-time counter. Exact per-stage
+        // timings are rendered from the server's real `reasoning_steps` on completion.
+        const depthStages = {
+            fast: ['Preparing dataset', 'Bias analysis', 'Truth verification', 'Trust scoring', 'Compliance assessment', 'Building report'],
+            standard: ['Preparing dataset', 'Bias analysis', 'Truth verification', 'Cluster analysis', 'Distribution analysis', 'Trust scoring', 'Compliance assessment', 'Building report'],
+            thorough: ['Preparing dataset', 'Bias analysis', 'Truth verification', 'Cluster analysis', 'Distribution analysis', 'Trust scoring', 'Auto-correction', 'Re-evaluation', 'Compliance assessment', 'Building report'],
+        };
+        const stages = depthStages[selectedDepth] || depthStages.standard;
         resultsEl.innerHTML = `
-            <div class="card glass-card" style="margin-top:1.25rem">
-                <h3 class="card-title" style="margin-bottom:1rem;">Running 8-Step Reasoning Pipeline...</h3>
+            <div class="card glass-card" style="margin-top:1.25rem" role="status" aria-live="polite">
+                <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:1rem;">
+                    <div class="loading-spinner" style="width:22px; height:22px; border-width:2px;"></div>
+                    <h3 class="card-title" style="margin:0;">Running ${escapeHtml(selectedDepth)} audit… <span id="audit-elapsed" style="color:var(--text-muted); font-weight:400; font-family:var(--font-mono);">0.0s</span></h3>
+                </div>
                 <div style="display:flex; flex-direction:column; gap:0.4rem;">
-                    ${steps.map((name, i) => `
-                        <div id="pipe-step-${i+1}" style="display:flex; align-items:center; gap:0.75rem; padding:0.6rem 0.75rem; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:6px; opacity: 0.4; transition: all 0.3s ease;">
-                            <div style="font-size:1rem; width:24px; text-align:center;">⏳</div>
-                            <div style="flex:1;"><div style="font-size:0.78rem; font-weight:600; color:var(--text-muted);">Step ${i+1}: ${name}</div></div>
+                    ${stages.map((name) => `
+                        <div style="display:flex; align-items:center; gap:0.75rem; padding:0.55rem 0.75rem; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:6px;">
+                            <div style="font-size:0.9rem; width:20px; text-align:center; color:var(--text-muted);">•</div>
+                            <div style="font-size:0.78rem; color:var(--text-secondary);">${escapeHtml(name)}</div>
                         </div>
                     `).join('')}
                 </div>
+                <div style="font-size:0.7rem; color:var(--text-muted); margin-top:0.75rem;">Independent stages run in parallel on the server. Real per-stage timings appear in the completed report below.</div>
             </div>
         `;
-        
-        let currentStep = 1;
-        const stepInterval = setInterval(() => {
-            const stepEl = document.getElementById('pipe-step-' + currentStep);
-            if (stepEl) {
-                stepEl.style.opacity = '1';
-                stepEl.style.background = 'rgba(16,185,129,0.12)';
-                stepEl.style.borderColor = 'rgba(16,185,129,0.3)';
-                stepEl.querySelector('div:nth-child(1)').textContent = '⚙️';
-                stepEl.querySelector('div:nth-child(2) > div').style.color = 'var(--accent-emerald)';
-            }
-            currentStep++;
-            if (currentStep > 8 || !document.getElementById('pipe-step-1')) {
-                clearInterval(stepInterval);
-            }
-        }, 300);
+
+        const startedAt = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+        const elapsedTimer = setInterval(() => {
+            const el = document.getElementById('audit-elapsed');
+            if (!el) return;
+            const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+            el.textContent = ((now - startedAt) / 1000).toFixed(1) + 's';
+        }, 100);
         try {
             let payload;
             if (currentDataset && Array.isArray(currentDataset.features) && Array.isArray(currentDataset.labels)) {
@@ -279,11 +283,12 @@ Example JSON: {"features": [[1,5,3,50],[0,2,4,30]], "labels": [1,0], "protected_
                     setTimeout(() => { if (!isAfter) sliderBtn.click(); }, 1500);
                 }
             } else {
-                resultsEl.innerHTML = '<div class="card" style="border-color:var(--accent-red);"><div style="padding:1rem; color:var(--accent-red);">Audit failed. Check backend.</div></div>';
+                resultsEl.innerHTML = '<div class="card" style="border-color:var(--accent-red);"><div style="padding:1rem; color:var(--accent-red);">The audit did not complete. Please check your connection and try again — your data was not stored.</div></div>';
             }
         } catch (err) {
             resultsEl.innerHTML = '<div class="card" style="border-color:var(--accent-red);"><div style="padding:1rem; color:var(--accent-red);">' + escapeHtml(err.message || 'Audit failed') + '</div></div>';
         } finally {
+            clearInterval(elapsedTimer);
             btn.disabled = false;
             btn.textContent = '→ Run Full Audit';
         }

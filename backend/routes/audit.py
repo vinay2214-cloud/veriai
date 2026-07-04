@@ -1,6 +1,7 @@
 """Full audit endpoints, including mapped CSV ingestion."""
 import json
 import logging
+import time
 from typing import Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from ..models import AuditRequest
@@ -30,8 +31,13 @@ def _attach_ai_summary(result: dict) -> dict:
 
 @router.post("/audit")
 async def audit(request: AuditRequest):
-    """Run the full multi-step audit pipeline with parallel processing."""
-    logger.info("=== AUDIT ROUTE ENTERED ===")
+    """Run the full multi-step audit pipeline with parallel processing.
+
+    Emits one structured ``audit_timing`` log per request with per-stage latency
+    (validation, audit execution, compliance summary, persistence, serialization)
+    so production latency is observable without any debug prints.
+    """
+    t_start = time.perf_counter()
     # Invalidate truth cache to pick up any new KB entries
     invalidate_cache()
 
@@ -62,7 +68,9 @@ async def audit(request: AuditRequest):
             status_code=400,
             detail="Provide input_text, a structured dataset with features+labels, or dataset_id='demo_hiring'.",
         )
+    validation_ms = round((time.perf_counter() - t_start) * 1000, 2)
 
+    t_audit = time.perf_counter()
     try:
         result = await run_audit(
             input_text=input_text,
@@ -71,10 +79,14 @@ async def audit(request: AuditRequest):
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    audit_ms = round((time.perf_counter() - t_audit) * 1000, 2)
 
+    t_comp = time.perf_counter()
     result = _attach_ai_summary(result)
+    compliance_ms = round((time.perf_counter() - t_comp) * 1000, 2)
 
     # Persist to SQLite. A DB hiccup must not discard an already-completed audit.
+    t_persist = time.perf_counter()
     try:
         await db.insert_audit(
             audit_id=result["audit_id"],
@@ -95,8 +107,43 @@ async def audit(request: AuditRequest):
             )
     except Exception:
         logger.exception("Failed to persist audit %s", result.get("audit_id"))
+    persist_ms = round((time.perf_counter() - t_persist) * 1000, 2)
 
+    _log_audit_timing(result, validation_ms, audit_ms, compliance_ms, persist_ms, t_start)
     return result
+
+
+def _log_audit_timing(result, validation_ms, audit_ms, compliance_ms, persist_ms, t_start):
+    """Emit one structured timing line. Serialization is measured here (bounded by
+    the persisted-report size cap, so sub-millisecond) to complete the stage picture
+    without adding meaningful latency."""
+    t_ser = time.perf_counter()
+    try:
+        response_bytes = len(json.dumps(result, default=str))
+    except Exception:
+        response_bytes = -1
+    serialize_ms = round((time.perf_counter() - t_ser) * 1000, 2)
+    total_ms = round((time.perf_counter() - t_start) * 1000, 2)
+    logger.info(
+        "audit_timing",
+        extra={
+            "event": "audit_timing",
+            "audit_id": result.get("audit_id"),
+            "depth": result.get("depth"),
+            "audit_type": result.get("audit_type"),
+            "from_cache": result.get("from_cache", False),
+            "trust_score": result.get("trust_score"),
+            "stages_ms": {
+                "validation": validation_ms,
+                "audit_execution": audit_ms,
+                "compliance_summary": compliance_ms,
+                "persistence": persist_ms,
+                "serialization": serialize_ms,
+            },
+            "total_ms": total_ms,
+            "response_bytes": response_bytes,
+        },
+    )
 
 
 @router.post("/audit/preview-csv")
@@ -122,6 +169,7 @@ async def run_mapped_audit(
     depth: Optional[str] = Form("fast"),
 ):
     """Run audit from a raw CSV + user-provided column mapping."""
+    t_start = time.perf_counter()
     content = await file.read()
     try:
         mapping_payload = json.loads(mapping)
@@ -137,7 +185,9 @@ async def run_mapped_audit(
         raise HTTPException(status_code=400, detail=f"Failed to prepare mapped dataset: {exc}")
 
     invalidate_cache()
+    validation_ms = round((time.perf_counter() - t_start) * 1000, 2)
 
+    t_audit = time.perf_counter()
     try:
         result = await run_audit(
             input_text=json.dumps(dataset_payload),
@@ -146,9 +196,13 @@ async def run_mapped_audit(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    audit_ms = round((time.perf_counter() - t_audit) * 1000, 2)
     result["column_mapping"] = normalized_mapping
+    t_comp = time.perf_counter()
     result = _attach_ai_summary(result)
+    compliance_ms = round((time.perf_counter() - t_comp) * 1000, 2)
 
+    t_persist = time.perf_counter()
     try:
         await db.insert_audit(
             audit_id=result["audit_id"],
@@ -169,4 +223,7 @@ async def run_mapped_audit(
             )
     except Exception:
         logger.exception("Failed to persist mapped audit %s", result.get("audit_id"))
+    persist_ms = round((time.perf_counter() - t_persist) * 1000, 2)
+
+    _log_audit_timing(result, validation_ms, audit_ms, compliance_ms, persist_ms, t_start)
     return result

@@ -3,7 +3,7 @@ Returns the full audit record from the database.
 """
 import io
 import json
-from datetime import datetime
+from datetime import datetime, UTC
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from .. import database as db
@@ -81,7 +81,7 @@ async def export_report(audit_id: str, format: str = Query("json", pattern="^(js
     # Title
     story.append(Paragraph(f"VeriAI Trust Audit Report", title_style))
     story.append(Paragraph(f"<b>Audit ID:</b> {payload.get('audit_id')}", normal_style))
-    story.append(Paragraph(f"<b>Generated Date:</b> {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC", normal_style))
+    story.append(Paragraph(f"<b>Generated Date:</b> {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')} UTC", normal_style))
     story.append(Spacer(1, 0.2*inch))
     
     # Scores Table
