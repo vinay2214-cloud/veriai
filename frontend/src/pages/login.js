@@ -43,6 +43,7 @@ export async function renderLogin(rootEl, api) {
                             <span class="login-input-icon">🔒</span>
                             <input type="password" class="login-input" placeholder="••••••••" required />
                         </div>
+                        <div style="font-size:0.72rem; color:var(--text-muted); margin-top:0.4rem; text-align:center;">Single-user workspace — no external accounts.</div>
                     </div>
                     <div class="login-options">
                         <label class="login-remember"><input type="checkbox" checked /> Remember me</label>
@@ -58,7 +59,7 @@ export async function renderLogin(rootEl, api) {
 
                 <div class="login-trust-badges">
                     <span class="login-trust-badge">AES-256</span>
-                    <span class="login-trust-badge">JWT Auth</span>
+                    <span class="login-trust-badge">Session Auth</span>
                     <span class="login-trust-badge">Audit Logs</span>
                 </div>
             </div>

@@ -59,6 +59,9 @@ KNOWLEDGE_ARTICLES = [
     },
 ]
 
+import os
+import json
+
 SAMPLE_AUDIT = {
     "id": "demo-001",
     "input": "Evaluate hiring algorithm for gender bias in tech company recruitment pipeline",
@@ -66,13 +69,34 @@ SAMPLE_AUDIT = {
     "truth_score": 0.72,
     "trust_score": 0.68,
     "corrected": "Applied demographic parity correction. Adjusted gender feature weight from 0.45 to 0.15.",
+    "report_json": json.dumps({
+        "audit_id": "demo-001",
+        "audit_type": "dataset",
+        "input_text": "Evaluate hiring algorithm for gender bias in tech company recruitment pipeline",
+        "bias": {
+            "bias_score": 0.38,
+            "demographic_parity": 0.38,
+            "equal_opportunity": 0.38,
+            "p_y_given_male": 0.72,
+            "p_y_given_female": 0.34
+        },
+        "truth": {
+            "truth_score": 0.72
+        },
+        "trust_score": 0.68,
+        "elapsed_seconds": 2.85
+    })
 }
 
 
 def seed_database():
     """Populate the knowledge base and insert a sample audit.
     Safe to call multiple times — uses INSERT OR IGNORE.
+    Only run in local SQLite dev/test/demo mode, never on production PostgreSQL.
     """
+    if os.getenv("DATABASE_URL"):
+        return
+
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
@@ -92,9 +116,9 @@ def seed_database():
     cursor.execute("SELECT COUNT(*) FROM audits WHERE id = ?", (SAMPLE_AUDIT["id"],))
     if cursor.fetchone()[0] == 0:
         cursor.execute(
-            "INSERT INTO audits (id, input, bias_score, truth_score, trust_score, corrected) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO audits (id, input, bias_score, truth_score, trust_score, corrected, report_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (SAMPLE_AUDIT["id"], SAMPLE_AUDIT["input"], SAMPLE_AUDIT["bias_score"],
-             SAMPLE_AUDIT["truth_score"], SAMPLE_AUDIT["trust_score"], SAMPLE_AUDIT["corrected"]),
+             SAMPLE_AUDIT["truth_score"], SAMPLE_AUDIT["trust_score"], SAMPLE_AUDIT["corrected"], SAMPLE_AUDIT["report_json"]),
         )
 
     conn.commit()

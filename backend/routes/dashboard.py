@@ -47,12 +47,51 @@ async def stats():
 @router.get("/dashboard/recent")
 async def recent():
     """Return the most recent audits."""
+    import json
     try:
-        rows = await db.list_audits(limit=20)
-        return [
-            {"audit_id": r[0], "input": r[1][:100], "trust_score": r[2], "created_at": r[3], "audit_type": r[4] if len(r) > 4 else "dataset"}
-            for r in rows
-        ]
+        rows = await db.fetch_all(
+            "SELECT id, input, trust_score, created_at, audit_type, bias_score, truth_score, report_json "
+            "FROM audits ORDER BY created_at DESC LIMIT ?",
+            (20,),
+        )
+        res = []
+        for r in rows:
+            audit_id = r[0]
+            input_text = r[1][:100]
+            trust_score = r[2]
+            created_at = r[3]
+            audit_type = r[4] if len(r) > 4 else "dataset"
+            bias_score = r[5] if len(r) > 5 else None
+            truth_score = r[6] if len(r) > 6 else None
+            report_str = r[7] if len(r) > 7 else None
+
+            item = {
+                "audit_id": audit_id,
+                "input": input_text,
+                "trust_score": trust_score,
+                "created_at": created_at,
+                "audit_type": audit_type,
+                "bias_score": bias_score,
+                "truth_score": truth_score,
+                "demographic_parity": 0.0,
+                "equal_opportunity": 0.0,
+                "p_y_given_male": None,
+                "p_y_given_female": None,
+            }
+
+            if report_str:
+                try:
+                    rep = json.loads(report_str)
+                    bias_obj = rep.get("bias", {})
+                    if isinstance(bias_obj, dict):
+                        item["demographic_parity"] = bias_obj.get("demographic_parity", 0.0)
+                        item["equal_opportunity"] = bias_obj.get("equal_opportunity", 0.0)
+                        item["p_y_given_male"] = bias_obj.get("p_y_given_male")
+                        item["p_y_given_female"] = bias_obj.get("p_y_given_female")
+                except Exception:
+                    pass
+            res.append(item)
+        return res
     except Exception:
         return []
 

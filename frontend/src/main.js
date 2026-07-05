@@ -35,7 +35,7 @@ export const API_BASE = resolveApiBase();
 // forcing a circular import of this module.
 window.__VERIAI_API_BASE__ = API_BASE;
 
-const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 504]);
+const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
 const SAFE_RETRY_METHODS = new Set(['GET', 'HEAD']);
 const MAX_REQUEST_RETRIES = 1;
 const DEFAULT_REQUEST_TIMEOUT_MS = 30000;

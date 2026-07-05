@@ -20,6 +20,27 @@ function kpiCard(label, value, sub = '', accent = 'cyan') {
         </div>`;
 }
 
+function trendPanel(title, canvasId, points) {
+    const hasTrend = Array.isArray(points) && points.length >= 2;
+    return `
+        <div class="card glass-card" style="box-shadow:var(--shadow-md);">
+            <div class="card-header" style="border-bottom:1px solid var(--border-glass); padding-bottom:0.75rem;">
+                <h3 class="card-title" style="margin:0;">${escapeHtml(title)}</h3>
+            </div>
+            ${hasTrend
+                ? `<div style="position: relative; height:220px; width: 100%; margin-top:1rem;"><canvas id="${canvasId}"></canvas></div>`
+                : `<div class="dv-empty" style="min-height:220px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0.5rem; padding:1rem; color:var(--text-muted);">
+                       <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.35; margin-bottom: 0.25rem;">
+                           <path d="M3 3v18h18"/>
+                           <path d="m19 9-5 5-4-4-3 3"/>
+                       </svg>
+                       <div style="font-weight:500;">Not enough audits yet</div>
+                       <div style="font-size:0.72rem; opacity:0.8;">Run 2 or more audits to see trust and bias trends.</div>
+                   </div>`
+            }
+        </div>`;
+}
+
 export async function renderInsightsPage(rootEl, api) {
     const data = await api.get('/insights/executive');
     const k = (data && data.kpis) || {};
@@ -28,7 +49,12 @@ export async function renderInsightsPage(rootEl, api) {
     const riskColor = RISK_COLOR[risk.level] || 'var(--text-muted)';
     const durationTxt = (k.avg_audit_duration_seconds != null)
         ? `${k.avg_audit_duration_seconds}s avg`
-        : 'not tracked yet';
+        : 'Coming soon';
+    const durationSub = (k.avg_audit_duration_seconds != null)
+        ? 'automated pipeline'
+        : 'duration tracking pending';
+    const trustTrend = (data && data.trends && data.trends.trust) || [];
+    const biasTrend = (data && data.trends && data.trends.bias) || [];
 
     rootEl.innerHTML = `
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.5rem;">
@@ -53,22 +79,12 @@ export async function renderInsightsPage(rootEl, api) {
             ${kpiCard('Compliance Health', `${k.compliance_health_pct ?? 0}%`, 'audits meeting the trust bar', 'emerald')}
             ${kpiCard('Datasets Processed', k.datasets_processed ?? 0, `${k.reports_generated ?? 0} reports`, 'cyan')}
             ${kpiCard('Est. Hours Saved', `${timeSaved.hours ?? 0}h`, 'vs. manual review (estimate)', 'emerald')}
-            ${kpiCard('Avg Audit Time', durationTxt, 'automated pipeline', 'cyan')}
+            ${kpiCard('Avg Audit Time', durationTxt, durationSub, 'cyan')}
         </div>
 
         <div class="grid grid-2" style="gap:1.5rem;">
-            <div class="card glass-card" style="box-shadow:var(--shadow-md);">
-                <div class="card-header" style="border-bottom:1px solid var(--border-glass); padding-bottom:0.75rem;">
-                    <h3 class="card-title" style="margin:0;">Trust Score Trend</h3>
-                </div>
-                <div style="height:220px; margin-top:1rem;"><canvas id="insights-trust-chart"></canvas></div>
-            </div>
-            <div class="card glass-card" style="box-shadow:var(--shadow-md);">
-                <div class="card-header" style="border-bottom:1px solid var(--border-glass); padding-bottom:0.75rem;">
-                    <h3 class="card-title" style="margin:0;">Bias Trend</h3>
-                </div>
-                <div style="height:220px; margin-top:1rem;"><canvas id="insights-bias-chart"></canvas></div>
-            </div>
+            ${trendPanel('Trust Score Trend', 'insights-trust-chart', trustTrend)}
+            ${trendPanel('Bias Trend', 'insights-bias-chart', biasTrend)}
         </div>
 
         <div style="margin-top:1rem; color:var(--text-muted); font-size:0.78rem;">

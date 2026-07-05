@@ -252,7 +252,10 @@ async def lifespan(app: FastAPI):
 
     # Schedule the entire database initialization, seeding, and model priming
     # to run concurrently/asynchronously, allowing uvicorn to bind immediately.
-    app.state.init_task = asyncio.create_task(_background_initialization(app))
+    if "pytest" in sys.modules:
+        await _background_initialization(app)
+    else:
+        app.state.init_task = asyncio.create_task(_background_initialization(app))
 
     yield
     # --- Shutdown ---
@@ -272,6 +275,15 @@ app = FastAPI(
     description="Detect, score, explain, and correct bias and hallucinations in AI systems.",
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logging.getLogger("veriai").exception("Unhandled exception: %s", exc)
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": "An unexpected error occurred. Please contact system administrator."},
+    )
 
 ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "*").split(",")
 

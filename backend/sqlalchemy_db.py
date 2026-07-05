@@ -52,6 +52,8 @@ async def get_db_session() -> AsyncIterator[AsyncSession]:
             await session.close()
 
 
+from sqlalchemy import text
+
 async def init_sqlalchemy_models() -> None:
     """Create ORM tables on startup.
     Runs only when DATABASE_URL is configured.
@@ -61,7 +63,20 @@ async def init_sqlalchemy_models() -> None:
     engine = get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-
+        # Postgres trigger to prevent update on audits
+        await conn.execute(text(
+            "CREATE OR REPLACE FUNCTION prevent_audit_mod() RETURNS TRIGGER AS $$\n"
+            "BEGIN\n"
+            "    RAISE EXCEPTION 'Audit log entries are immutable and cannot be updated.';\n"
+            "END;\n"
+            "$$ LANGUAGE plpgsql;"
+        ))
+        await conn.execute(text("DROP TRIGGER IF EXISTS audits_prevent_mod ON audits;"))
+        await conn.execute(text(
+            "CREATE TRIGGER audits_prevent_mod\n"
+            "BEFORE UPDATE ON audits\n"
+            "FOR EACH ROW EXECUTE FUNCTION prevent_audit_mod();"
+        ))
 
 async def close_engine() -> None:
     global _engine, _session_maker

@@ -1,5 +1,45 @@
 import { escapeHtml, formatDate } from '../utils.js';
 
+function asNumber(value, fallback = 0) {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function hasUsefulBiasMetrics(data) {
+    if (!data || data.error) return false;
+    return ['bias_score', 'p_y_given_male', 'p_y_given_female']
+        .some(key => Math.abs(asNumber(data[key], 0)) > 0);
+}
+
+function hasUsefulFairnessMetrics(data) {
+    if (!data || data.error) return false;
+    return ['demographic_parity', 'equal_opportunity']
+        .some(key => Math.abs(asNumber(data[key], 0)) > 0);
+}
+
+function latestAuditFallback(stats, recent) {
+    const audits = Array.isArray(recent) ? recent : [];
+    const latest = audits.find(a => a && a.trust_score !== null && a.trust_score !== undefined) || {};
+    const bias = asNumber(latest.bias_score, asNumber(stats?.avg_bias, 0));
+    const truth = asNumber(latest.truth_score, asNumber(stats?.avg_truth, 0));
+    const trust = asNumber(latest.trust_score, asNumber(stats?.avg_trust, 0));
+    const demographic_parity = asNumber(latest.demographic_parity, bias);
+    const equal_opportunity = asNumber(latest.equal_opportunity, 1 - bias);
+    const p_y_given_male = latest.p_y_given_male !== undefined ? latest.p_y_given_male : null;
+    const p_y_given_female = latest.p_y_given_female !== undefined ? latest.p_y_given_female : null;
+    return {
+        latest,
+        bias,
+        truth,
+        trust,
+        fairness: Math.max(0, Math.min(1, 1 - bias)),
+        demographic_parity,
+        equal_opportunity,
+        p_y_given_male,
+        p_y_given_female,
+    };
+}
+
 export async function renderDashboard(rootEl, api) {
     // Phase 2 — these six dashboard endpoints are independent, so fetch them
     // concurrently instead of sequentially. On Render this replaces six serial
@@ -15,10 +55,25 @@ export async function renderDashboard(rootEl, api) {
     const modelComparison = { models: [] };
 
     const s = stats || { total_audits: 0, avg_trust: 0, avg_bias: 0, avg_truth: 0, total_feedback: 0 };
+    const fallback = latestAuditFallback(s, recent);
     const pending = reviewStats?.pending || 0;
-    const bd = biasData && !biasData.error ? biasData : { bias_score: 0, p_y_given_male: 0, p_y_given_female: 0 };
-    const fd = fairnessData && !fairnessData.error ? fairnessData : { demographic_parity: 0, equal_opportunity: 0 };
-    const trustPct = Math.round((s.avg_trust || 0) * 100);
+    const hasAudits = asNumber(s.total_audits, 0) > 0 || Boolean(fallback.latest.audit_id);
+    const bd = hasUsefulBiasMetrics(biasData)
+        ? biasData
+        : {
+            bias_score: fallback.bias,
+            p_y_given_male: fallback.p_y_given_male,
+            p_y_given_female: fallback.p_y_given_female,
+            metric: hasAudits ? 'latest_audit_bias_score' : 'unavailable',
+        };
+    const fd = hasUsefulFairnessMetrics(fairnessData)
+        ? fairnessData
+        : {
+            demographic_parity: fallback.demographic_parity,
+            equal_opportunity: fallback.equal_opportunity,
+            metric: hasAudits ? 'latest_audit_fairness_fallback' : 'unavailable',
+        };
+    const trustPct = Math.round(fallback.trust * 100);
     const biasPct = (bd.bias_score * 100).toFixed(1);
     const dpVal = (fd.demographic_parity * 100).toFixed(1);
     const eoVal = (fd.equal_opportunity * 100).toFixed(1);
@@ -43,8 +98,8 @@ export async function renderDashboard(rootEl, api) {
                     <span class="dv-panel-title">Fairness Drift</span>
                     <span class="dv-panel-sub">Last 30 days</span>
                 </div>
-                <div class="dv-drift-chart-area">
-                    <canvas id="driftChart" height="120"></canvas>
+                <div class="dv-drift-chart-area" style="position: relative; height: 120px; width: 100%;">
+                    <canvas id="driftChart"></canvas>
                 </div>
                 <div class="dv-drift-legend">
                     <span><span class="dv-legend-dot" style="background:#10b981"></span>Demographic Parity</span>
@@ -64,7 +119,7 @@ export async function renderDashboard(rootEl, api) {
                 </div>
                 <div class="dv-trust-metrics">
                     <span><span class="dv-legend-dot" style="background:#10b981"></span>Bias Fairness (${(100 - parseFloat(biasPct)).toFixed(0)}%)</span>
-                    <span><span class="dv-legend-dot" style="background:#06b6d4"></span>Truth Score (${((s.avg_truth||0)*100).toFixed(0)}%)</span>
+                    <span><span class="dv-legend-dot" style="background:#06b6d4"></span>Truth Score (${(fallback.truth*100).toFixed(0)}%)</span>
                     <span><span class="dv-legend-dot" style="background:#8b5cf6"></span>Equal Opp. (${eoVal}%)</span>
                 </div>
             </div>
@@ -74,8 +129,8 @@ export async function renderDashboard(rootEl, api) {
                     <span class="dv-panel-title">Audit Volume</span>
                     <span class="dv-panel-sub">Total Audits</span>
                 </div>
-                <div class="dv-volume-chart-area">
-                    <canvas id="volumeChart" height="140"></canvas>
+                <div class="dv-volume-chart-area" style="position: relative; height: 140px; width: 100%;">
+                    <canvas id="volumeChart"></canvas>
                 </div>
             </div>
         </div>
@@ -128,11 +183,17 @@ export async function renderDashboard(rootEl, api) {
                         <button class="method-btn" data-method="lime">LIME</button>
                     </div>
                 </div>
-                <div id="shap-chart-container" style="min-height:180px">
-                    <div class="dv-empty" style="padding:2rem 1rem;">
-                        <div style="font-size:1.2rem;margin-bottom:0.4rem;">📐</div>
-                        <div style="color:var(--text-secondary);font-weight:500;margin-bottom:0.3rem;">Explainability on demand</div>
-                        <div style="font-size:0.72rem;">Select Linear/Coeff/Perm/LIME to compute SHAP.</div>
+                <div id="shap-chart-container" style="min-height:180px; display:flex; flex-direction:column; justify-content:center;">
+                    <div class="dv-empty" style="padding:1.5rem; display:flex; flex-direction:column; align-items:center; gap:0.75rem;">
+                        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.5;">
+                            <line x1="18" y1="20" x2="18" y2="10"/>
+                            <line x1="12" y1="20" x2="12" y2="4"/>
+                            <line x1="6" y1="20" x2="6" y2="14"/>
+                        </svg>
+                        <div>
+                            <div style="color:var(--text-secondary);font-weight:500;margin-bottom:0.3rem;">Explainability on demand</div>
+                            <div style="font-size:0.72rem; color:var(--text-muted);">Select Linear/Coeff/Perm/LIME to compute SHAP.</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -152,7 +213,7 @@ export async function renderDashboard(rootEl, api) {
                         <div class="dv-metric-label">Equal Opportunity</div>
                     </div>
                     <div class="dv-metric">
-                        <div class="dv-metric-val" id="pmale-value" style="color:#f59e0b">${(bd.p_y_given_male * 100).toFixed(1)}%</div>
+                        <div class="dv-metric-val" id="pmale-value" style="color:#f59e0b">${bd.p_y_given_male == null ? 'N/A' : (bd.p_y_given_male * 100).toFixed(1) + '%'}</div>
                         <div class="dv-metric-label">P(>50K | Male)</div>
                     </div>
                     <div class="dv-metric">
@@ -160,7 +221,7 @@ export async function renderDashboard(rootEl, api) {
                         <div class="dv-metric-label">Drift Delta</div>
                     </div>
                 </div>
-                <div style="height:130px;margin-top:0.5rem"><canvas id="radarChart"></canvas></div>
+                <div style="position: relative; height:130px; margin-top:0.5rem;"><canvas id="radarChart"></canvas></div>
             </div>
 
             <div class="dv-panel">
@@ -250,7 +311,7 @@ export async function renderDashboard(rootEl, api) {
         </div>
     `;
 
-    setTimeout(() => initCharts(s, biasData, fairnessData, driftData, recent), 80);
+    setTimeout(() => initCharts(s, bd, fd, driftData, recent), 80);
 
     document.querySelectorAll('#shap-method-selector .method-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -282,7 +343,7 @@ async function loadShapChart(api, method) {
         d = await api.get('/explain?index=0&method=' + method);
     } catch(e) { d = null; }
     if (!d || d.status === 'error' || d.detail) {
-        container.innerHTML = '<div class="dv-empty" style="padding:2.5rem 1rem"><div style="font-size:1.5rem;margin-bottom:0.5rem">📐</div><div style="color:var(--text-secondary);font-weight:500;margin-bottom:0.3rem">No Model Trained</div><div style="font-size:0.72rem">Click <strong>🔄 Retrain</strong> below to train the model first</div></div>';
+        container.innerHTML = '<div class="dv-empty" style="padding:2.5rem 1rem"><div style="color:var(--text-secondary);font-weight:500;margin-bottom:0.3rem">No Model Trained</div><div style="font-size:0.72rem">Click <strong>Retrain</strong> below to train the model first</div></div>';
         return;
     }
     const c = d.contributions || [];
@@ -310,7 +371,10 @@ async function handleAction(api, action) {
 async function refreshMetrics(api) {
     const [b, f] = await Promise.all([api.get('/bias'), api.get('/fairness')]);
     const set = (id, t) => { const e = document.getElementById(id); if(e) { e.style.opacity='0.3'; setTimeout(() => { e.textContent=t; e.style.opacity='1'; }, 150); } };
-    if (b) { set('live-bias-value', (b.bias_score*100).toFixed(1)+'%'); set('pmale-value', (b.p_y_given_male*100).toFixed(1)+'%'); }
+    if (b) {
+        set('live-bias-value', (b.bias_score*100).toFixed(1)+'%');
+        set('pmale-value', b.p_y_given_male == null ? 'N/A' : (b.p_y_given_male*100).toFixed(1)+'%');
+    }
     if (f) { set('dp-value', (f.demographic_parity*100).toFixed(1)+'%'); set('eo-value', (f.equal_opportunity*100).toFixed(1)+'%'); }
     const m = document.querySelector('#shap-method-selector .method-btn.active');
     await loadShapChart(api, m?.dataset.method || 'linear');
@@ -356,9 +420,10 @@ function initCharts(stats, bias, fairness, drift, recent) {
         const labels = pts.length > 0 ? pts.map((_,i) => i+1).reverse() : [1,2,3,4,5,6,7];
         const dpData = pts.length > 0 ? pts.map(p => (p.bias_score||0)*100).reverse() : [12,14,13,15,14,16,15];
         const eoData = pts.length > 0 ? pts.map(p => (p.truth_score||0)*100).reverse() : [18,17,19,18,20,19,18];
+        const pointRadius = pts.length < 2 ? 4 : 0;
         new Chart(dCtx, { type:'line', data:{ labels, datasets:[
-            { data:dpData, borderColor:'#10b981', backgroundColor:'rgba(16,185,129,0.08)', fill:true, tension:0.4, pointRadius:0, borderWidth:2 },
-            { data:eoData, borderColor:'#06b6d4', backgroundColor:'rgba(6,182,212,0.05)', fill:true, tension:0.4, pointRadius:0, borderWidth:2 },
+            { label:'Demographic Parity', data:dpData, borderColor:'#10b981', backgroundColor:'rgba(16,185,129,0.08)', fill:true, tension:0.4, pointRadius, borderWidth:2 },
+            { label:'Equal Opportunity', data:eoData, borderColor:'#06b6d4', backgroundColor:'rgba(6,182,212,0.05)', fill:true, tension:0.4, pointRadius, borderWidth:2 },
         ]}, options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{display:false}, y:{display:false} }, plugins:{legend:{display:false},tooltip:{enabled:false}} } });
     }
 
@@ -376,8 +441,8 @@ function initCharts(stats, bias, fairness, drift, recent) {
     if (rCtx) {
         const f1 = Math.max((1 - bd.bias_score) * 100, 0) || 62;
         const eo = (fd.equal_opportunity * 100) || 55;
-        const pm = (bd.p_y_given_male * 100) || 40;
-        new Chart(rCtx, { type:'radar', data:{ labels:['Fairness','Eq. Opp','P(Male)'], datasets:[{data:[f1,eo,pm],backgroundColor:'rgba(16,185,129,0.12)',borderColor:'#10b981',pointBackgroundColor:'#10b981',borderWidth:2,pointRadius:3}] }, options:{ responsive:true, maintainAspectRatio:true, scales:{r:{angleLines:{color:'rgba(255,255,255,0.06)'},grid:{color:'rgba(255,255,255,0.06)'},pointLabels:{color:'#94a3b8',font:{size:11}},ticks:{display:false,max:100}}}, plugins:{legend:{display:false}} } });
+        const pm = bd.p_y_given_male == null ? f1 : (bd.p_y_given_male * 100);
+        new Chart(rCtx, { type:'radar', data:{ labels:['Fairness','Eq. Opp','P(Male)'], datasets:[{data:[f1,eo,pm],backgroundColor:'rgba(16,185,129,0.12)',borderColor:'#10b981',pointBackgroundColor:'#10b981',borderWidth:2,pointRadius:3}] }, options:{ responsive:true, maintainAspectRatio:true, scales:{r:{min:0,max:100,angleLines:{color:'rgba(255,255,255,0.06)'},grid:{color:'rgba(255,255,255,0.06)'},pointLabels:{color:'#94a3b8',font:{size:11}},ticks:{display:false}}}, plugins:{legend:{display:false}} } });
     }
 
     // Scatter: Bias vs Truth

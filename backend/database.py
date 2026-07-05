@@ -121,6 +121,14 @@ async def init_db() -> None:
                 pass
         for index_stmt in INDEXES:
             await db.execute(index_stmt)
+        await db.execute(
+            "CREATE TRIGGER IF NOT EXISTS audits_prevent_update "
+            "BEFORE UPDATE ON audits "
+            "BEGIN "
+            "  SELECT RAISE(FAIL, 'Audit log entries are immutable and cannot be updated.'); "
+            "END;"
+        )
+        await db.execute("DROP TRIGGER IF EXISTS audits_prevent_delete;")
         await db.commit()
 
 # ---------------------------------------------------------------------------
